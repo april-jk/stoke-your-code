@@ -2,7 +2,7 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import fs from 'node:fs'
 import path from 'node:path'
-import { execFileSync } from 'node:child_process'
+import { execFile } from 'node:child_process'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 
 type GitCommitRow = {
@@ -29,6 +29,14 @@ type AnalyzePayload = {
   branch?: string
 }
 
+type AnalyzeStage =
+  | 'validating-local'
+  | 'validating-github'
+  | 'cloning-github'
+  | 'fetching-github'
+  | 'checking-out-branch'
+  | 'analyzing-history'
+
 function readBody(request: IncomingMessage) {
   return new Promise<string>((resolve, reject) => {
     let data = ''
@@ -45,6 +53,34 @@ function sendJson(response: ServerResponse, status: number, payload: unknown) {
   response.statusCode = status
   response.setHeader('Content-Type', 'application/json')
   response.end(JSON.stringify(payload))
+}
+
+function runGit(
+  args: string[],
+  options: {
+    cwd?: string
+  } = {},
+) {
+  return new Promise<string>((resolve, reject) => {
+    execFile(
+      'git',
+      args,
+      {
+        cwd: options.cwd,
+        encoding: 'utf8',
+        maxBuffer: 1024 * 1024 * 64,
+      },
+      (error, stdout, stderr) => {
+        if (error) {
+          const message = stderr?.trim() || stdout?.trim() || error.message
+          reject(new Error(message))
+          return
+        }
+
+        resolve(stdout)
+      },
+    )
+  })
 }
 
 function parseGitHubUrl(repoUrl: string) {
@@ -82,59 +118,51 @@ function ensureRemoteCacheDir() {
   return cacheDir
 }
 
-function ensureGitHubRepository(repoUrl: string, branch?: string) {
+async function ensureGitHubRepository(
+  repoUrl: string,
+  branch: string | undefined,
+  onStage: (stage: AnalyzeStage) => void,
+) {
   const { owner, repo, cloneUrl } = parseGitHubUrl(repoUrl)
   const cacheDir = ensureRemoteCacheDir()
   const repoDir = path.join(cacheDir, `github.com_${owner}_${repo}`)
 
   if (!fs.existsSync(repoDir)) {
-    execFileSync('git', ['clone', '--no-tags', cloneUrl, repoDir], {
-      encoding: 'utf8',
-      stdio: 'pipe',
-    })
+    onStage('cloning-github')
+    await runGit(['clone', '--no-tags', cloneUrl, repoDir])
   } else {
-    execFileSync('git', ['fetch', '--all', '--prune'], {
+    onStage('fetching-github')
+    await runGit(['fetch', '--all', '--prune'], {
       cwd: repoDir,
-      encoding: 'utf8',
-      stdio: 'pipe',
     })
   }
 
   const requestedBranch = branch?.trim()
 
   if (requestedBranch) {
-    execFileSync('git', ['checkout', requestedBranch], {
+    onStage('checking-out-branch')
+    await runGit(['checkout', requestedBranch], {
       cwd: repoDir,
-      encoding: 'utf8',
-      stdio: 'pipe',
     })
-    execFileSync('git', ['pull', '--ff-only', 'origin', requestedBranch], {
+    await runGit(['pull', '--ff-only', 'origin', requestedBranch], {
       cwd: repoDir,
-      encoding: 'utf8',
-      stdio: 'pipe',
     })
   } else {
-    const defaultBranch = execFileSync(
-      'git',
+    const defaultBranch = (await runGit(
       ['rev-parse', '--abbrev-ref', 'origin/HEAD'],
       {
         cwd: repoDir,
-        encoding: 'utf8',
-        stdio: 'pipe',
       },
-    )
+    ))
       .trim()
       .replace(/^origin\//, '')
 
-    execFileSync('git', ['checkout', defaultBranch], {
+    onStage('checking-out-branch')
+    await runGit(['checkout', defaultBranch], {
       cwd: repoDir,
-      encoding: 'utf8',
-      stdio: 'pipe',
     })
-    execFileSync('git', ['pull', '--ff-only', 'origin', defaultBranch], {
+    await runGit(['pull', '--ff-only', 'origin', defaultBranch], {
       cwd: repoDir,
-      encoding: 'utf8',
-      stdio: 'pipe',
     })
   }
 
@@ -159,9 +187,8 @@ function ensureGitRepository(repoPath: string) {
   return absolutePath
 }
 
-function getGitRows(repoPath: string) {
-  const output = execFileSync(
-    'git',
+async function getGitRows(repoPath: string) {
+  const output = await runGit(
     [
       'log',
       '--all',
@@ -173,7 +200,6 @@ function getGitRows(repoPath: string) {
     ],
     {
       cwd: repoPath,
-      encoding: 'utf8',
     },
   )
 
@@ -262,7 +288,9 @@ function buildCandles(rows: GitCommitRow[]) {
     existing.commits += 1
   }
 
-  const candleList = Array.from(candles.values())
+  const candleList = Array.from(candles.values()).sort((left, right) =>
+    left.day.localeCompare(right.day),
+  )
 
   return {
     authorCount: authors.size,
@@ -293,11 +321,13 @@ export default defineConfig({
             const rawBody = await readBody(request)
             const payload = JSON.parse(rawBody) as AnalyzePayload
             const source = payload.source ?? 'local'
+            const stages: AnalyzeStage[] = []
 
             let absolutePath = ''
             let displayName = ''
 
             if (source === 'github') {
+              stages.push('validating-github')
               const repoUrl = payload.repoUrl?.trim()
 
               if (!repoUrl) {
@@ -307,10 +337,15 @@ export default defineConfig({
                 return
               }
 
-              const remoteRepo = ensureGitHubRepository(repoUrl, payload.branch)
+              const remoteRepo = await ensureGitHubRepository(
+                repoUrl,
+                payload.branch,
+                (stage) => stages.push(stage),
+              )
               absolutePath = remoteRepo.repoPath
               displayName = remoteRepo.displayName
             } else {
+              stages.push('validating-local')
               const repoPath = payload.repoPath?.trim()
 
               if (!repoPath) {
@@ -324,7 +359,8 @@ export default defineConfig({
               displayName = absolutePath
             }
 
-            const rows = getGitRows(absolutePath)
+            stages.push('analyzing-history')
+            const rows = await getGitRows(absolutePath)
 
             if (rows.length === 0) {
               sendJson(response, 400, {
@@ -339,6 +375,7 @@ export default defineConfig({
               repoPath: absolutePath,
               displayName,
               source,
+              stages,
               commitCount: rows.length,
               authorCount: analysis.authorCount,
               latestClose: analysis.latestClose,

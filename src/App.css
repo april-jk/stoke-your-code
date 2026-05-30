@@ -543,6 +543,62 @@
   color: #ffb4b0;
 }
 
+.status-banner {
+  margin: 0;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid rgba(109, 214, 159, 0.25);
+  background: rgba(14, 54, 37, 0.38);
+  color: #bfe9cf;
+  font-family: var(--mono);
+  font-size: 0.84rem;
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.status-banner-loading {
+  border-color: rgba(109, 214, 159, 0.38);
+  background:
+    linear-gradient(
+      90deg,
+      rgba(14, 54, 37, 0.42),
+      rgba(29, 88, 63, 0.56),
+      rgba(14, 54, 37, 0.42)
+    );
+  background-size: 220% 100%;
+  animation: statusPulse 1.8s linear infinite;
+}
+
+.status-banner-success {
+  border-color: rgba(109, 214, 159, 0.25);
+  background: rgba(14, 54, 37, 0.28);
+}
+
+.status-spinner {
+  width: 0.78rem;
+  height: 0.78rem;
+  border-radius: 999px;
+  border: 2px solid rgba(191, 233, 207, 0.28);
+  border-top-color: #bfe9cf;
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes statusPulse {
+  0% {
+    background-position: 0% 50%;
+  }
+
+  100% {
+    background-position: 220% 50%;
+  }
+}
+
 .analysis-summary {
   display: grid;
   gap: 1rem;

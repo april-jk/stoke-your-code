@@ -33,6 +33,7 @@ type AnalysisResponse = {
   repoPath: string
   displayName: string
   source: 'local' | 'github'
+  stages?: string[]
   commitCount: number
   authorCount: number
   latestClose: number
@@ -55,6 +56,27 @@ type HoverSnapshot = {
 }
 
 type RepoSourceMode = 'local' | 'github'
+
+function describeAnalyzeStage(stage: string, sourceMode: RepoSourceMode) {
+  switch (stage) {
+    case 'validating-local':
+      return 'Validating local repository path...'
+    case 'validating-github':
+      return 'Validating GitHub repository URL...'
+    case 'cloning-github':
+      return 'Cloning GitHub repository into local cache...'
+    case 'fetching-github':
+      return 'Fetching latest changes from GitHub...'
+    case 'checking-out-branch':
+      return 'Checking out target branch...'
+    case 'analyzing-history':
+      return sourceMode === 'github'
+        ? 'Analyzing cloned repository history...'
+        : 'Analyzing local repository history...'
+    default:
+      return 'Analyzing repository...'
+  }
+}
 
 function toBusinessDay(day: string): BusinessDay {
   const [year, month, date] = day.split('-').map((part) => Number.parseInt(part, 10))
@@ -487,6 +509,8 @@ function AnalysisPage() {
   const [error, setError] = useState('')
   const [hoveredCandle, setHoveredCandle] = useState<HoverSnapshot | null>(null)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [statusMessage, setStatusMessage] = useState('')
+  const [statusKind, setStatusKind] = useState<'idle' | 'loading' | 'success'>('idle')
 
   const latestCandle = data?.candles.at(-1) ?? null
   const trend =
@@ -548,6 +572,8 @@ function AnalysisPage() {
           setData(payload as AnalysisResponse)
           setHoveredCandle(((payload as AnalysisResponse).candles.at(-1) as HoverSnapshot | undefined) ?? null)
           setRepoPath('/Users/watson/codingProj/stoke-your-code')
+          setStatusKind('success')
+          setStatusMessage('Local repository loaded and chart updated.')
         }
       } catch {
         // Keep the page usable even if the initial sample load fails.
@@ -559,6 +585,12 @@ function AnalysisPage() {
     event.preventDefault()
     setLoading(true)
     setError('')
+    setStatusKind('loading')
+    setStatusMessage(
+      sourceMode === 'github'
+        ? 'Validating GitHub repository URL...'
+        : 'Validating local repository path...',
+    )
 
     try {
       const response = await fetch('/api/analyze', {
@@ -588,11 +620,21 @@ function AnalysisPage() {
         )
       }
 
+      const stageList = (payload as AnalysisResponse).stages ?? []
+      const latestStage = stageList.at(-1)
       setData(payload as AnalysisResponse)
       setHoveredCandle(((payload as AnalysisResponse).candles.at(-1) as HoverSnapshot | undefined) ?? null)
+      setStatusKind('success')
+      setStatusMessage(
+        latestStage
+          ? `${describeAnalyzeStage(latestStage, sourceMode).replace(/\.\.\.$/, '')}. Chart updated.`
+          : 'Repository analyzed successfully.',
+      )
     } catch (submitError) {
       setData(null)
       setHoveredCandle(null)
+      setStatusKind('idle')
+      setStatusMessage('')
       setError(
         submitError instanceof Error
           ? submitError.message
@@ -601,6 +643,17 @@ function AnalysisPage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  function switchSourceMode(nextMode: RepoSourceMode) {
+    if (nextMode === sourceMode) {
+      return
+    }
+
+    setSourceMode(nextMode)
+    setError('')
+    setStatusMessage('')
+    setStatusKind('idle')
   }
 
   return (
@@ -637,14 +690,14 @@ function AnalysisPage() {
               <button
                 type="button"
                 className={`source-tab ${sourceMode === 'local' ? 'source-tab-active' : ''}`}
-                onClick={() => setSourceMode('local')}
+                onClick={() => switchSourceMode('local')}
               >
                 Local
               </button>
               <button
                 type="button"
                 className={`source-tab ${sourceMode === 'github' ? 'source-tab-active' : ''}`}
-                onClick={() => setSourceMode('github')}
+                onClick={() => switchSourceMode('github')}
               >
                 GitHub
               </button>
@@ -705,6 +758,17 @@ function AnalysisPage() {
                 ? 'Public GitHub repository URL, or a private repository if your server has credentials configured.'
                 : 'Path must be local and include a `.git` directory.'}
             </p>
+            {loading || statusMessage ? (
+              <p className={`status-banner status-banner-${statusKind}`}>
+                {statusKind === 'loading' ? <span className="status-spinner" aria-hidden="true" /> : null}
+                {loading
+                  ? statusMessage ||
+                    (sourceMode === 'github'
+                      ? 'Cloning and analyzing repository...'
+                      : 'Analyzing local repository...')
+                  : statusMessage}
+              </p>
+            ) : null}
             {error ? <p className="error-banner">{error}</p> : null}
           </form>
 
