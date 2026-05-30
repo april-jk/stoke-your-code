@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import {
+  type BusinessDay,
   CandlestickSeries,
   ColorType,
   CrosshairMode,
@@ -41,6 +42,26 @@ type AnalysisError = {
   error?: string
 }
 
+type HoverSnapshot = {
+  day: string
+  open: number
+  high: number
+  low: number
+  close: number
+  volume: number
+  commits: number
+}
+
+function toBusinessDay(day: string): BusinessDay {
+  const [year, month, date] = day.split('-').map((part) => Number.parseInt(part, 10))
+
+  return {
+    year,
+    month,
+    day: date,
+  }
+}
+
 const landingCandles: MockCandle[] = [
   { day: '05.03', open: 42, close: 68, high: 79, low: 34, volume: 28 },
   { day: '05.06', open: 68, close: 61, high: 82, low: 52, volume: 16 },
@@ -71,6 +92,24 @@ function formatCompact(value: number) {
     notation: 'compact',
     maximumFractionDigits: value >= 1000 ? 1 : 0,
   }).format(value)
+}
+
+function formatChartTime(
+  time: string | number | { year: number; month: number; day: number } | undefined,
+) {
+  if (!time) {
+    return null
+  }
+
+  if (typeof time === 'string') {
+    return time
+  }
+
+  if (typeof time === 'number') {
+    return new Date(time * 1000).toISOString().slice(0, 10)
+  }
+
+  return `${time.year}-${String(time.month).padStart(2, '0')}-${String(time.day).padStart(2, '0')}`
 }
 
 function Chart({
@@ -166,10 +205,15 @@ function Chart({
 
 function GitChart({
   candles,
+  onHover,
+  overlay,
 }: {
   candles: AnalysisCandle[]
+  onHover: (snapshot: HoverSnapshot | null) => void
+  overlay: React.ReactNode
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null)
+  const chartRef = useRef<ReturnType<typeof createChart> | null>(null)
 
   useEffect(() => {
     const container = containerRef.current
@@ -179,7 +223,8 @@ function GitChart({
     }
 
     const chart = createChart(container, {
-      autoSize: true,
+      width: Math.max(container.clientWidth, 320),
+      height: Math.max(container.clientHeight, 320),
       layout: {
         background: { type: ColorType.Solid, color: '#0b1117' },
         textColor: '#8f9aa5',
@@ -223,6 +268,7 @@ function GitChart({
         pinch: true,
       },
     })
+    chartRef.current = chart
 
     const candleSeries = chart.addSeries(CandlestickSeries, {
       upColor: '#37c978',
@@ -242,7 +288,7 @@ function GitChart({
         },
         priceScaleId: '',
       },
-      0,
+      1,
     )
 
     volumeSeries.priceScale().applyOptions({
@@ -254,7 +300,7 @@ function GitChart({
 
     candleSeries.setData(
       candles.map((candle) => ({
-        time: candle.day,
+        time: toBusinessDay(candle.day),
         open: candle.open,
         high: candle.high,
         low: candle.low,
@@ -264,7 +310,7 @@ function GitChart({
 
     volumeSeries.setData(
       candles.map((candle) => ({
-        time: candle.day,
+        time: toBusinessDay(candle.day),
         value: candle.volume,
         color:
           candle.close >= candle.open
@@ -273,14 +319,53 @@ function GitChart({
       })),
     )
 
+    const candleByDay = new Map(candles.map((candle) => [candle.day, candle]))
+    const resizeObserver = new ResizeObserver((entries) => {
+      const entry = entries[0]
+
+      if (!entry || !chartRef.current) {
+        return
+      }
+
+      chartRef.current.resize(
+        Math.max(entry.contentRect.width, 320),
+        Math.max(entry.contentRect.height, 320),
+      )
+    })
+    resizeObserver.observe(container)
+
+    const handleCrosshairMove = (param: {
+      time?: string | number | { year: number; month: number; day: number }
+      point?: { x: number; y: number }
+    }) => {
+      const timeKey = formatChartTime(param.time)
+
+      if (!timeKey) {
+        onHover(null)
+        return
+      }
+
+      const candle = candleByDay.get(timeKey)
+      onHover(candle ?? null)
+    }
+
+    chart.subscribeCrosshairMove(handleCrosshairMove)
     chart.timeScale().fitContent()
 
     return () => {
+      chart.unsubscribeCrosshairMove(handleCrosshairMove)
+      resizeObserver.disconnect()
       chart.remove()
+      chartRef.current = null
     }
-  }, [candles])
+  }, [candles, onHover])
 
-  return <div className="git-chart" ref={containerRef} />
+  return (
+    <div className="git-chart-wrap">
+      <div className="git-chart-overlay">{overlay}</div>
+      <div className="git-chart" ref={containerRef} />
+    </div>
+  )
 }
 
 function LandingPage() {
@@ -394,6 +479,7 @@ function AnalysisPage() {
   const [data, setData] = useState<AnalysisResponse | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [hoveredCandle, setHoveredCandle] = useState<HoverSnapshot | null>(null)
 
   const latestCandle = data?.candles.at(-1) ?? null
   const trend =
@@ -428,6 +514,13 @@ function AnalysisPage() {
     ]
   }, [data, latestCandle, trend])
 
+  const infoCandle = hoveredCandle ?? latestCandle
+  const infoDelta = infoCandle ? infoCandle.close - infoCandle.open : null
+  const infoPercent =
+    infoCandle && infoCandle.open !== 0
+      ? (infoDelta! / Math.abs(infoCandle.open)) * 100
+      : null
+
   useEffect(() => {
     void (async () => {
       try {
@@ -443,6 +536,7 @@ function AnalysisPage() {
 
         if (response.ok) {
           setData(payload as AnalysisResponse)
+          setHoveredCandle(((payload as AnalysisResponse).candles.at(-1) as HoverSnapshot | undefined) ?? null)
           setRepoPath('/Users/watson/codingProj/stoke-your-code')
         }
       } catch {
@@ -474,8 +568,10 @@ function AnalysisPage() {
       }
 
       setData(payload as AnalysisResponse)
+      setHoveredCandle(((payload as AnalysisResponse).candles.at(-1) as HoverSnapshot | undefined) ?? null)
     } catch (submitError) {
       setData(null)
+      setHoveredCandle(null)
       setError(
         submitError instanceof Error
           ? submitError.message
@@ -565,14 +661,62 @@ function AnalysisPage() {
           </div>
 
           <div className="analysis-chart-shell">
-            {data ? (
-              <GitChart candles={data.candles} />
-            ) : (
-              <div className="analysis-chart-placeholder">
-                <p className="panel-label">CHART STANDBY</p>
-                <p>Enter a valid Git repository path to render the candle tape.</p>
+            {data ? <GitChart candles={data.candles} onHover={setHoveredCandle} overlay={<div className="floating-ticker">
+              <div className="ticker-strip">
+                {infoCandle ? (
+                  <>
+                    <div className="ticker-main">
+                      <span className="ticker-label">DATE</span>
+                      <span className="ticker-value">{infoCandle.day}</span>
+                    </div>
+                    <div className="ticker-item">
+                      <span className="ticker-label">O</span>
+                      <span className="ticker-value">{formatCompact(infoCandle.open)}</span>
+                    </div>
+                    <div className="ticker-item">
+                      <span className="ticker-label">H</span>
+                      <span className="ticker-value">{formatCompact(infoCandle.high)}</span>
+                    </div>
+                    <div className="ticker-item">
+                      <span className="ticker-label">L</span>
+                      <span className="ticker-value">{formatCompact(infoCandle.low)}</span>
+                    </div>
+                    <div className="ticker-item">
+                      <span className="ticker-label">C</span>
+                      <span className="ticker-value">{formatCompact(infoCandle.close)}</span>
+                    </div>
+                    <div className="ticker-item">
+                      <span className="ticker-label">CHG</span>
+                      <span className={`ticker-value ${infoDelta !== null && infoDelta >= 0 ? 'positive' : 'negative'}`}>
+                        {infoDelta !== null ? `${infoDelta >= 0 ? '+' : ''}${formatCompact(infoDelta)}` : 'n/a'}
+                      </span>
+                    </div>
+                    <div className="ticker-item">
+                      <span className="ticker-label">%</span>
+                      <span className={`ticker-value ${infoPercent !== null && infoPercent >= 0 ? 'positive' : 'negative'}`}>
+                        {infoPercent !== null ? `${infoPercent >= 0 ? '+' : ''}${infoPercent.toFixed(2)}%` : 'n/a'}
+                      </span>
+                    </div>
+                    <div className="ticker-item">
+                      <span className="ticker-label">VOL</span>
+                      <span className="ticker-value">{formatCompact(infoCandle.volume)}</span>
+                    </div>
+                    <div className="ticker-item">
+                      <span className="ticker-label">N</span>
+                      <span className="ticker-value">{infoCandle.commits}</span>
+                    </div>
+                  </>
+                ) : (
+                  <div className="ticker-main">
+                    <span className="ticker-label">STATUS</span>
+                    <span className="ticker-value">Load a repository to view session data</span>
+                  </div>
+                )}
               </div>
-            )}
+            </div>} /> : <div className="analysis-chart-placeholder">
+              <p className="panel-label">CHART STANDBY</p>
+              <p>Enter a valid Git repository path to render the candle tape.</p>
+            </div>}
           </div>
         </section>
       </section>
