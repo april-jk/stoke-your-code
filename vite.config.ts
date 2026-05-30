@@ -22,6 +22,13 @@ type Candle = {
   commits: number
 }
 
+type AnalyzePayload = {
+  repoPath?: string
+  source?: 'local' | 'github'
+  repoUrl?: string
+  branch?: string
+}
+
 function readBody(request: IncomingMessage) {
   return new Promise<string>((resolve, reject) => {
     let data = ''
@@ -38,6 +45,104 @@ function sendJson(response: ServerResponse, status: number, payload: unknown) {
   response.statusCode = status
   response.setHeader('Content-Type', 'application/json')
   response.end(JSON.stringify(payload))
+}
+
+function parseGitHubUrl(repoUrl: string) {
+  let parsed: URL
+
+  try {
+    parsed = new URL(repoUrl)
+  } catch {
+    throw new Error('Please provide a valid GitHub repository URL.')
+  }
+
+  if (parsed.hostname !== 'github.com') {
+    throw new Error('Only github.com repository URLs are supported in this mode.')
+  }
+
+  const segments = parsed.pathname.replace(/\/+$/, '').split('/').filter(Boolean)
+
+  if (segments.length < 2) {
+    throw new Error('GitHub repository URL must look like https://github.com/owner/repo.')
+  }
+
+  const owner = segments[0]
+  const repo = segments[1].replace(/\.git$/, '')
+
+  return {
+    owner,
+    repo,
+    cloneUrl: `https://github.com/${owner}/${repo}.git`,
+  }
+}
+
+function ensureRemoteCacheDir() {
+  const cacheDir = path.resolve('.cache/remote-repos')
+  fs.mkdirSync(cacheDir, { recursive: true })
+  return cacheDir
+}
+
+function ensureGitHubRepository(repoUrl: string, branch?: string) {
+  const { owner, repo, cloneUrl } = parseGitHubUrl(repoUrl)
+  const cacheDir = ensureRemoteCacheDir()
+  const repoDir = path.join(cacheDir, `github.com_${owner}_${repo}`)
+
+  if (!fs.existsSync(repoDir)) {
+    execFileSync('git', ['clone', '--no-tags', cloneUrl, repoDir], {
+      encoding: 'utf8',
+      stdio: 'pipe',
+    })
+  } else {
+    execFileSync('git', ['fetch', '--all', '--prune'], {
+      cwd: repoDir,
+      encoding: 'utf8',
+      stdio: 'pipe',
+    })
+  }
+
+  const requestedBranch = branch?.trim()
+
+  if (requestedBranch) {
+    execFileSync('git', ['checkout', requestedBranch], {
+      cwd: repoDir,
+      encoding: 'utf8',
+      stdio: 'pipe',
+    })
+    execFileSync('git', ['pull', '--ff-only', 'origin', requestedBranch], {
+      cwd: repoDir,
+      encoding: 'utf8',
+      stdio: 'pipe',
+    })
+  } else {
+    const defaultBranch = execFileSync(
+      'git',
+      ['rev-parse', '--abbrev-ref', 'origin/HEAD'],
+      {
+        cwd: repoDir,
+        encoding: 'utf8',
+        stdio: 'pipe',
+      },
+    )
+      .trim()
+      .replace(/^origin\//, '')
+
+    execFileSync('git', ['checkout', defaultBranch], {
+      cwd: repoDir,
+      encoding: 'utf8',
+      stdio: 'pipe',
+    })
+    execFileSync('git', ['pull', '--ff-only', 'origin', defaultBranch], {
+      cwd: repoDir,
+      encoding: 'utf8',
+      stdio: 'pipe',
+    })
+  }
+
+  return {
+    repoPath: repoDir,
+    displayName: `${owner}/${repo}`,
+    source: 'github' as const,
+  }
 }
 
 function ensureGitRepository(repoPath: string) {
@@ -186,17 +291,39 @@ export default defineConfig({
 
           try {
             const rawBody = await readBody(request)
-            const payload = JSON.parse(rawBody) as { repoPath?: string }
-            const repoPath = payload.repoPath?.trim()
+            const payload = JSON.parse(rawBody) as AnalyzePayload
+            const source = payload.source ?? 'local'
 
-            if (!repoPath) {
-              sendJson(response, 400, {
-                error: 'Please provide a local repository path.',
-              })
-              return
+            let absolutePath = ''
+            let displayName = ''
+
+            if (source === 'github') {
+              const repoUrl = payload.repoUrl?.trim()
+
+              if (!repoUrl) {
+                sendJson(response, 400, {
+                  error: 'Please provide a GitHub repository URL.',
+                })
+                return
+              }
+
+              const remoteRepo = ensureGitHubRepository(repoUrl, payload.branch)
+              absolutePath = remoteRepo.repoPath
+              displayName = remoteRepo.displayName
+            } else {
+              const repoPath = payload.repoPath?.trim()
+
+              if (!repoPath) {
+                sendJson(response, 400, {
+                  error: 'Please provide a local repository path.',
+                })
+                return
+              }
+
+              absolutePath = ensureGitRepository(repoPath)
+              displayName = absolutePath
             }
 
-            const absolutePath = ensureGitRepository(repoPath)
             const rows = getGitRows(absolutePath)
 
             if (rows.length === 0) {
@@ -210,6 +337,8 @@ export default defineConfig({
 
             sendJson(response, 200, {
               repoPath: absolutePath,
+              displayName,
+              source,
               commitCount: rows.length,
               authorCount: analysis.authorCount,
               latestClose: analysis.latestClose,

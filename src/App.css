@@ -465,6 +465,27 @@
   align-content: start;
 }
 
+.source-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.source-tab {
+  min-height: 2.6rem;
+  border: 1px solid rgba(161, 177, 192, 0.18);
+  background: rgba(8, 12, 17, 0.72);
+  color: var(--muted);
+  font-family: var(--mono);
+  cursor: pointer;
+}
+
+.source-tab-active {
+  border-color: rgba(109, 214, 159, 0.4);
+  background: rgba(14, 54, 37, 0.55);
+  color: var(--text);
+}
+
 .analysis-metrics {
   min-height: 0;
   display: grid;

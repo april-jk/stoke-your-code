@@ -31,6 +31,8 @@ type AnalysisCandle = {
 
 type AnalysisResponse = {
   repoPath: string
+  displayName: string
+  source: 'local' | 'github'
   commitCount: number
   authorCount: number
   latestClose: number
@@ -51,6 +53,8 @@ type HoverSnapshot = {
   volume: number
   commits: number
 }
+
+type RepoSourceMode = 'local' | 'github'
 
 function toBusinessDay(day: string): BusinessDay {
   const [year, month, date] = day.split('-').map((part) => Number.parseInt(part, 10))
@@ -474,7 +478,10 @@ function LandingPage() {
 }
 
 function AnalysisPage() {
+  const [sourceMode, setSourceMode] = useState<RepoSourceMode>('local')
   const [repoPath, setRepoPath] = useState('/Users/watson/codingProj/stoke-your-code')
+  const [repoUrl, setRepoUrl] = useState('https://github.com/openai/openai-node')
+  const [branch, setBranch] = useState('')
   const [data, setData] = useState<AnalysisResponse | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -529,7 +536,10 @@ function AnalysisPage() {
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ repoPath: '/Users/watson/codingProj/stoke-your-code' }),
+          body: JSON.stringify({
+            source: 'local',
+            repoPath: '/Users/watson/codingProj/stoke-your-code',
+          }),
         })
 
         const payload = (await response.json()) as AnalysisResponse | AnalysisError
@@ -556,7 +566,18 @@ function AnalysisPage() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ repoPath }),
+        body: JSON.stringify(
+          sourceMode === 'github'
+            ? {
+                source: 'github',
+                repoUrl,
+                branch,
+              }
+            : {
+                source: 'local',
+                repoPath,
+              },
+        ),
       })
 
       const payload = (await response.json()) as AnalysisResponse | AnalysisError
@@ -598,33 +619,91 @@ function AnalysisPage() {
           className={`analysis-sidebar ${sidebarCollapsed ? 'analysis-sidebar-collapsed' : ''}`}
         >
           <div className="analysis-copy">
-            <p className="eyebrow">Local Git repository analysis</p>
+            <p className="eyebrow">
+              {sourceMode === 'github'
+                ? 'GitHub repository analysis'
+                : 'Local Git repository analysis'}
+            </p>
             <h1>Professional candle tape for code history.</h1>
             <p className="summary">
-              Feed in a local Git repository. The page validates the path, reads
-              real commit history, and renders daily OHLC candles plus volume in
-              one screen.
+              {sourceMode === 'github'
+                ? 'Point the analyzer at a GitHub repository URL. The service clones or refreshes the remote repository, reads commit history, and renders daily OHLC candles plus volume in one screen.'
+                : 'Feed in a local Git repository. The page validates the path, reads real commit history, and renders daily OHLC candles plus volume in one screen.'}
             </p>
           </div>
 
           <form className="repo-form" onSubmit={handleSubmit}>
-            <label className="repo-label" htmlFor="repo-path">
-              Local directory path
-            </label>
-            <input
-              id="repo-path"
-              className="repo-input"
-              type="text"
-              value={repoPath}
-              onChange={(event) => setRepoPath(event.target.value)}
-              placeholder="/absolute/path/to/a/git/repository"
-              spellCheck={false}
-            />
+            <div className="source-tabs" role="tablist" aria-label="Repository source mode">
+              <button
+                type="button"
+                className={`source-tab ${sourceMode === 'local' ? 'source-tab-active' : ''}`}
+                onClick={() => setSourceMode('local')}
+              >
+                Local
+              </button>
+              <button
+                type="button"
+                className={`source-tab ${sourceMode === 'github' ? 'source-tab-active' : ''}`}
+                onClick={() => setSourceMode('github')}
+              >
+                GitHub
+              </button>
+            </div>
+
+            {sourceMode === 'github' ? (
+              <>
+                <label className="repo-label" htmlFor="repo-url">
+                  GitHub repository URL
+                </label>
+                <input
+                  id="repo-url"
+                  className="repo-input"
+                  type="text"
+                  value={repoUrl}
+                  onChange={(event) => setRepoUrl(event.target.value)}
+                  placeholder="https://github.com/owner/repo"
+                  spellCheck={false}
+                />
+                <label className="repo-label" htmlFor="repo-branch">
+                  Branch, optional
+                </label>
+                <input
+                  id="repo-branch"
+                  className="repo-input"
+                  type="text"
+                  value={branch}
+                  onChange={(event) => setBranch(event.target.value)}
+                  placeholder="Leave empty for the default branch"
+                  spellCheck={false}
+                />
+              </>
+            ) : (
+              <>
+                <label className="repo-label" htmlFor="repo-path">
+                  Local directory path
+                </label>
+                <input
+                  id="repo-path"
+                  className="repo-input"
+                  type="text"
+                  value={repoPath}
+                  onChange={(event) => setRepoPath(event.target.value)}
+                  placeholder="/absolute/path/to/a/git/repository"
+                  spellCheck={false}
+                />
+              </>
+            )}
             <button className="primary-link button-link" type="submit" disabled={loading}>
-              {loading ? 'Analyzing repository...' : 'Analyze repository'}
+              {loading
+                ? sourceMode === 'github'
+                  ? 'Cloning and analyzing repository...'
+                  : 'Analyzing repository...'
+                : 'Analyze repository'}
             </button>
             <p className="repo-hint">
-              Path must be local and include a `.git` directory.
+              {sourceMode === 'github'
+                ? 'Public GitHub repository URL, or a private repository if your server has credentials configured.'
+                : 'Path must be local and include a `.git` directory.'}
             </p>
             {error ? <p className="error-banner">{error}</p> : null}
           </form>
@@ -662,8 +741,10 @@ function AnalysisPage() {
               >
                 {sidebarCollapsed ? '>' : '<'}
               </button>
-              <p className="panel-label">REAL GIT OUTPUT</p>
-              <h2>{data ? data.repoPath : 'Awaiting repository input'}</h2>
+              <p className="panel-label">
+                {data ? `REAL ${data.source.toUpperCase()} OUTPUT` : 'REAL GIT OUTPUT'}
+              </p>
+              <h2>{data ? data.displayName : 'Awaiting repository input'}</h2>
             </div>
             <div className="panel-stats">
               <span>{data ? `${data.candles.length} trading days of code` : 'No data loaded'}</span>
