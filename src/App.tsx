@@ -1,17 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import {
-  type BusinessDay,
   CandlestickSeries,
   ColorType,
   CrosshairMode,
   HistogramSeries,
+  type UTCTimestamp,
   createChart,
 } from 'lightweight-charts'
 import './App.css'
 
 type MockCandle = {
-  day: string
+  label: string
   open: number
   close: number
   high: number
@@ -20,7 +20,9 @@ type MockCandle = {
 }
 
 type AnalysisCandle = {
-  day: string
+  label?: string
+  timestamp: number
+  isoTime: string
   open: number
   close: number
   high: number
@@ -38,7 +40,7 @@ type AnalysisResponse = {
   authorCount: number
   latestClose: number
   totalVolume: number
-  candles: AnalysisCandle[]
+  commitEvents: AnalysisCandle[]
 }
 
 type AnalysisError = {
@@ -51,7 +53,9 @@ type RepoBranchesResponse = {
 }
 
 type HoverSnapshot = {
-  day: string
+  label: string
+  timestamp: number
+  isoTime: string
   open: number
   high: number
   low: number
@@ -61,6 +65,7 @@ type HoverSnapshot = {
 }
 
 type RepoSourceMode = 'local' | 'github'
+type Timeframe = '5m' | '1h' | '1d' | '1w' | '1m'
 
 function describeAnalyzeStage(stage: string, sourceMode: RepoSourceMode) {
   switch (stage) {
@@ -83,25 +88,23 @@ function describeAnalyzeStage(stage: string, sourceMode: RepoSourceMode) {
   }
 }
 
-function toBusinessDay(day: string): BusinessDay {
-  const [year, month, date] = day.split('-').map((part) => Number.parseInt(part, 10))
-
-  return {
-    year,
-    month,
-    day: date,
-  }
-}
-
 const landingCandles: MockCandle[] = [
-  { day: '05.03', open: 42, close: 68, high: 79, low: 34, volume: 28 },
-  { day: '05.06', open: 68, close: 61, high: 82, low: 52, volume: 16 },
-  { day: '05.09', open: 61, close: 92, high: 97, low: 58, volume: 31 },
-  { day: '05.12', open: 92, close: 88, high: 104, low: 73, volume: 20 },
-  { day: '05.15', open: 88, close: 126, high: 132, low: 84, volume: 37 },
-  { day: '05.18', open: 126, close: 119, high: 141, low: 110, volume: 24 },
-  { day: '05.21', open: 119, close: 151, high: 168, low: 117, volume: 41 },
-  { day: '05.24', open: 151, close: 147, high: 176, low: 139, volume: 22 },
+  { label: '05.03', open: 42, close: 68, high: 79, low: 34, volume: 28 },
+  { label: '05.06', open: 68, close: 61, high: 82, low: 52, volume: 16 },
+  { label: '05.09', open: 61, close: 92, high: 97, low: 58, volume: 31 },
+  { label: '05.12', open: 92, close: 88, high: 104, low: 73, volume: 20 },
+  { label: '05.15', open: 88, close: 126, high: 132, low: 84, volume: 37 },
+  { label: '05.18', open: 126, close: 119, high: 141, low: 110, volume: 24 },
+  { label: '05.21', open: 119, close: 151, high: 168, low: 117, volume: 41 },
+  { label: '05.24', open: 151, close: 147, high: 176, low: 139, volume: 22 },
+]
+
+const timeframeOptions: Array<{ label: string; value: Timeframe }> = [
+  { label: '5M', value: '5m' },
+  { label: '1H', value: '1h' },
+  { label: '1D', value: '1d' },
+  { label: '1W', value: '1w' },
+  { label: '1M', value: '1m' },
 ]
 
 const landingMetrics = [
@@ -143,6 +146,107 @@ function formatChartTime(
   return `${time.year}-${String(time.month).padStart(2, '0')}-${String(time.day).padStart(2, '0')}`
 }
 
+function formatTimeframeLabel(isoTime: string, timeframe: Timeframe) {
+  const date = new Date(isoTime)
+
+  if (timeframe === '5m' || timeframe === '1h') {
+    return new Intl.DateTimeFormat('en', {
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).format(date)
+  }
+
+  if (timeframe === '1m') {
+    return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`
+  }
+
+  return isoTime.slice(0, 10)
+}
+
+function startOfWeek(date: Date) {
+  const copy = new Date(Date.UTC(
+    date.getUTCFullYear(),
+    date.getUTCMonth(),
+    date.getUTCDate(),
+    0,
+    0,
+    0,
+    0,
+  ))
+  const day = copy.getUTCDay()
+  const delta = day === 0 ? -6 : 1 - day
+  copy.setUTCDate(copy.getUTCDate() + delta)
+  return copy
+}
+
+function bucketStart(timestamp: number, timeframe: Timeframe) {
+  const date = new Date(timestamp * 1000)
+
+  if (timeframe === '5m') {
+    return Math.floor(timestamp / 300) * 300
+  }
+
+  if (timeframe === '1h') {
+    return Math.floor(timestamp / 3600) * 3600
+  }
+
+  if (timeframe === '1d') {
+    return Date.UTC(
+      date.getUTCFullYear(),
+      date.getUTCMonth(),
+      date.getUTCDate(),
+      0,
+      0,
+      0,
+      0,
+    ) / 1000
+  }
+
+  if (timeframe === '1w') {
+    return startOfWeek(date).getTime() / 1000
+  }
+
+  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1, 0, 0, 0, 0) / 1000
+}
+
+function aggregateCandles(candles: AnalysisCandle[], timeframe: Timeframe) {
+  const buckets = new Map<number, HoverSnapshot>()
+
+  for (const candle of candles) {
+    const bucket = bucketStart(candle.timestamp, timeframe)
+    const isoTime = new Date(bucket * 1000).toISOString()
+    const existing = buckets.get(bucket)
+
+    if (!existing) {
+      buckets.set(bucket, {
+        label: formatTimeframeLabel(isoTime, timeframe),
+        timestamp: bucket,
+        isoTime,
+        open: candle.open,
+        high: candle.high,
+        low: candle.low,
+        close: candle.close,
+        volume: candle.volume,
+        commits: candle.commits,
+      })
+      continue
+    }
+
+    existing.high = Math.max(existing.high, candle.high)
+    existing.low = Math.min(existing.low, candle.low)
+    existing.close = candle.close
+    existing.volume += candle.volume
+    existing.commits += candle.commits
+    existing.isoTime = isoTime
+    existing.label = formatTimeframeLabel(isoTime, timeframe)
+  }
+
+  return Array.from(buckets.values()).sort((left, right) => left.timestamp - right.timestamp)
+}
+
 function Chart({
   candles,
   metricLabel = 'LOC',
@@ -152,6 +256,10 @@ function Chart({
   metricLabel?: string
   annotate?: boolean
 }) {
+  const displayCandles = candles.map((candle) => ({
+    ...candle,
+    label: 'label' in candle ? candle.label : candle.isoTime.slice(0, 10),
+  }))
   const highs = candles.map((candle) => candle.high)
   const lows = candles.map((candle) => candle.low)
   const volumes = candles.map((candle) => candle.volume)
@@ -178,7 +286,7 @@ function Chart({
       </div>
 
       <div className="candles">
-        {candles.map((candle) => {
+        {displayCandles.map((candle) => {
           const bodyLow = Math.min(candle.open, candle.close)
           const bodyHigh = Math.max(candle.open, candle.close)
           const bodyBottom = ((bodyLow - bottom) / range) * 100
@@ -189,7 +297,7 @@ function Chart({
           const tone = candle.close >= candle.open ? 'up' : 'down'
 
           return (
-            <div className="candle-column" key={candle.day}>
+            <div className="candle-column" key={candle.label}>
               <div className="price-zone">
                 <div
                   className={`wick ${tone}`}
@@ -212,7 +320,7 @@ function Chart({
                   style={{ height: `${volumeHeight}%` }}
                 />
               </div>
-              <span className="day-label">{candle.day}</span>
+              <span className="day-label">{candle.label}</span>
             </div>
           )
         })}
@@ -239,7 +347,7 @@ function GitChart({
   onHover,
   overlay,
 }: {
-  candles: AnalysisCandle[]
+  candles: HoverSnapshot[]
   onHover: (snapshot: HoverSnapshot | null) => void
   overlay: React.ReactNode
 }) {
@@ -330,7 +438,7 @@ function GitChart({
 
     candleSeries.setData(
       candles.map((candle) => ({
-        time: toBusinessDay(candle.day),
+        time: candle.timestamp as UTCTimestamp,
         open: candle.open,
         high: candle.high,
         low: candle.low,
@@ -340,7 +448,7 @@ function GitChart({
 
     volumeSeries.setData(
       candles.map((candle) => ({
-        time: toBusinessDay(candle.day),
+        time: candle.timestamp as UTCTimestamp,
         value: candle.volume,
         color:
           candle.close >= candle.open
@@ -349,7 +457,7 @@ function GitChart({
       })),
     )
 
-    const candleByDay = new Map(candles.map((candle) => [candle.day, candle]))
+    const candleByTime = new Map(candles.map((candle) => [String(candle.timestamp), candle]))
     const resizeObserver = new ResizeObserver((entries) => {
       const entry = entries[0]
 
@@ -375,7 +483,10 @@ function GitChart({
         return
       }
 
-      const candle = candleByDay.get(timeKey)
+      const candle =
+        typeof param.time === 'number'
+          ? candleByTime.get(String(param.time))
+          : null
       onHover(candle ?? null)
     }
 
@@ -520,10 +631,15 @@ function AnalysisPage() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [statusMessage, setStatusMessage] = useState('')
   const [statusKind, setStatusKind] = useState<'idle' | 'loading' | 'success'>('idle')
+  const [timeframe, setTimeframe] = useState<Timeframe>('1d')
   const trimmedRepoUrl = repoUrl.trim()
   const trimmedRepoPath = repoPath.trim()
+  const timeframeCandles = useMemo(
+    () => (data ? aggregateCandles(data.commitEvents, timeframe) : []),
+    [data, timeframe],
+  )
 
-  const latestCandle = data?.candles.at(-1) ?? null
+  const latestCandle = timeframeCandles.at(-1) ?? null
   const trend =
     latestCandle && latestCandle.open !== 0
       ? ((latestCandle.close - latestCandle.open) / Math.abs(latestCandle.open)) * 100
@@ -535,12 +651,12 @@ function AnalysisPage() {
     }
 
     return [
-      { label: 'Commit days', value: String(data.candles.length), tone: 'neutral' },
+      { label: 'Candles', value: String(timeframeCandles.length), tone: 'neutral' },
       { label: 'Total commits', value: String(data.commitCount), tone: 'neutral' },
       { label: 'Active authors', value: String(data.authorCount), tone: 'neutral' },
       {
         label: 'Latest close',
-        value: `${formatCompact(data.latestClose)} LOC`,
+        value: `${formatCompact(latestCandle.close)} LOC`,
         tone: latestCandle.close >= latestCandle.open ? 'positive' : 'negative',
       },
       {
@@ -554,7 +670,7 @@ function AnalysisPage() {
         tone: 'warning',
       },
     ]
-  }, [data, latestCandle, trend])
+  }, [data, latestCandle, timeframeCandles.length, trend])
 
   const infoCandle = hoveredCandle ?? latestCandle
   const infoDelta = infoCandle ? infoCandle.close - infoCandle.open : null
@@ -657,7 +773,7 @@ function AnalysisPage() {
 
         if (response.ok) {
           setData(payload as AnalysisResponse)
-          setHoveredCandle(((payload as AnalysisResponse).candles.at(-1) as HoverSnapshot | undefined) ?? null)
+          setHoveredCandle(null)
           setRepoPath('/Users/watson/codingProj/stoke-your-code')
           setStatusKind('success')
           setStatusMessage('Local repository loaded and chart updated.')
@@ -695,6 +811,7 @@ function AnalysisPage() {
             : {
                 source: 'local',
                 repoPath,
+                branch,
               },
         ),
       })
@@ -710,7 +827,7 @@ function AnalysisPage() {
       const stageList = (payload as AnalysisResponse).stages ?? []
       const latestStage = stageList.at(-1)
       setData(payload as AnalysisResponse)
-      setHoveredCandle(((payload as AnalysisResponse).candles.at(-1) as HoverSnapshot | undefined) ?? null)
+      setHoveredCandle(null)
       setStatusKind('success')
       setStatusMessage(
         latestStage
@@ -969,7 +1086,9 @@ function AnalysisPage() {
               <h2>{data ? data.displayName : 'Awaiting repository input'}</h2>
             </div>
             <div className="panel-stats">
-              <span>{data ? `${data.candles.length} trading days of code` : 'No data loaded'}</span>
+              <span>
+                {data ? `${timeframeCandles.length} ${timeframe.toUpperCase()} candles` : 'No data loaded'}
+              </span>
               <span
                 className={`panel-stats-focus ${infoPercent !== null && infoPercent >= 0 ? 'positive' : 'negative'}`}
               >
@@ -981,51 +1100,68 @@ function AnalysisPage() {
           </div>
 
           <div className="analysis-chart-shell">
-            {data ? <GitChart candles={data.candles} onHover={setHoveredCandle} overlay={<div className="floating-ticker">
-              <div className="ticker-strip">
-                {infoCandle ? (
-                  <>
+            {data ? <GitChart candles={timeframeCandles} onHover={setHoveredCandle} overlay={<div className="floating-ticker">
+              <div className="ticker-stack">
+                <div className="ticker-strip">
+                  {infoCandle ? (
+                    <>
+                      <div className="ticker-main">
+                        <span className="ticker-label">DATE</span>
+                        <span className="ticker-value">{infoCandle.label}</span>
+                      </div>
+                      <div className="ticker-item">
+                        <span className="ticker-label">O</span>
+                        <span className="ticker-value">{formatCompact(infoCandle.open)}</span>
+                      </div>
+                      <div className="ticker-item">
+                        <span className="ticker-label">H</span>
+                        <span className="ticker-value">{formatCompact(infoCandle.high)}</span>
+                      </div>
+                      <div className="ticker-item">
+                        <span className="ticker-label">L</span>
+                        <span className="ticker-value">{formatCompact(infoCandle.low)}</span>
+                      </div>
+                      <div className="ticker-item">
+                        <span className="ticker-label">C</span>
+                        <span className="ticker-value">{formatCompact(infoCandle.close)}</span>
+                      </div>
+                      <div className="ticker-item">
+                        <span className="ticker-label">CHG</span>
+                        <span className={`ticker-value ${infoDelta !== null && infoDelta >= 0 ? 'positive' : 'negative'}`}>
+                          {infoDelta !== null ? `${infoDelta >= 0 ? '+' : ''}${formatCompact(infoDelta)}` : 'n/a'}
+                        </span>
+                      </div>
+                      <div className="ticker-item">
+                        <span className="ticker-label">VOL</span>
+                        <span className="ticker-value">{formatCompact(infoCandle.volume)}</span>
+                      </div>
+                      <div className="ticker-item">
+                        <span className="ticker-label">N</span>
+                        <span className="ticker-value">{infoCandle.commits}</span>
+                      </div>
+                    </>
+                  ) : (
                     <div className="ticker-main">
-                      <span className="ticker-label">DATE</span>
-                      <span className="ticker-value">{infoCandle.day}</span>
+                      <span className="ticker-label">STATUS</span>
+                      <span className="ticker-value">Load a repository to view session data</span>
                     </div>
-                    <div className="ticker-item">
-                      <span className="ticker-label">O</span>
-                      <span className="ticker-value">{formatCompact(infoCandle.open)}</span>
-                    </div>
-                    <div className="ticker-item">
-                      <span className="ticker-label">H</span>
-                      <span className="ticker-value">{formatCompact(infoCandle.high)}</span>
-                    </div>
-                    <div className="ticker-item">
-                      <span className="ticker-label">L</span>
-                      <span className="ticker-value">{formatCompact(infoCandle.low)}</span>
-                    </div>
-                    <div className="ticker-item">
-                      <span className="ticker-label">C</span>
-                      <span className="ticker-value">{formatCompact(infoCandle.close)}</span>
-                    </div>
-                    <div className="ticker-item">
-                      <span className="ticker-label">CHG</span>
-                      <span className={`ticker-value ${infoDelta !== null && infoDelta >= 0 ? 'positive' : 'negative'}`}>
-                        {infoDelta !== null ? `${infoDelta >= 0 ? '+' : ''}${formatCompact(infoDelta)}` : 'n/a'}
-                      </span>
-                    </div>
-                    <div className="ticker-item">
-                      <span className="ticker-label">VOL</span>
-                      <span className="ticker-value">{formatCompact(infoCandle.volume)}</span>
-                    </div>
-                    <div className="ticker-item">
-                      <span className="ticker-label">N</span>
-                      <span className="ticker-value">{infoCandle.commits}</span>
-                    </div>
-                  </>
-                ) : (
-                  <div className="ticker-main">
-                    <span className="ticker-label">STATUS</span>
-                    <span className="ticker-value">Load a repository to view session data</span>
-                  </div>
-                )}
+                  )}
+                </div>
+                <div className="timeframe-tabs timeframe-tabs-overlay" role="tablist" aria-label="Chart timeframe">
+                  {timeframeOptions.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      className={`timeframe-tab ${timeframe === option.value ? 'timeframe-tab-active' : ''}`}
+                      onClick={() => {
+                        setTimeframe(option.value)
+                        setHoveredCandle(null)
+                      }}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>} /> : <div className="analysis-chart-placeholder">
               <p className="panel-label">CHART STANDBY</p>

@@ -6,20 +6,29 @@ import { execFile } from 'node:child_process'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 
 type GitCommitRow = {
-  day: string
+  timestamp: number
+  isoTime: string
   author: string
   added: number
   deleted: number
 }
 
 type Candle = {
-  day: string
+  timestamp: number
+  isoTime: string
   open: number
   close: number
   high: number
   low: number
   volume: number
   commits: number
+}
+
+type AnalysisSummary = {
+  authorCount: number
+  latestClose: number
+  totalVolume: number
+  commitEvents: Candle[]
 }
 
 type AnalyzePayload = {
@@ -276,8 +285,8 @@ async function getGitRows(repoPath: string, branch?: string) {
   const args = [
     'log',
     '--reverse',
-    '--date=short',
-    '--pretty=format:__COMMIT__%x09%cs%x09%an',
+    '--date=iso-strict',
+    '--pretty=format:__COMMIT__%x09%ct%x09%cI%x09%an',
     '--numstat',
     '--no-renames',
   ]
@@ -294,18 +303,20 @@ async function getGitRows(repoPath: string, branch?: string) {
 
   const lines = output.split('\n')
   const rows: GitCommitRow[] = []
-  let currentDay = ''
+  let currentTimestamp = 0
+  let currentIsoTime = ''
   let currentAuthor = ''
   let currentAdded = 0
   let currentDeleted = 0
 
   function pushCurrent() {
-    if (!currentDay) {
+    if (!currentTimestamp || !currentIsoTime) {
       return
     }
 
     rows.push({
-      day: currentDay,
+      timestamp: currentTimestamp,
+      isoTime: currentIsoTime,
       author: currentAuthor,
       added: currentAdded,
       deleted: currentDeleted,
@@ -319,8 +330,9 @@ async function getGitRows(repoPath: string, branch?: string) {
 
     if (line.startsWith('__COMMIT__')) {
       pushCurrent()
-      const [, day = '', author = ''] = line.split('\t')
-      currentDay = day
+      const [, timestampText = '0', isoTime = '', author = ''] = line.split('\t')
+      currentTimestamp = Number.parseInt(timestampText, 10)
+      currentIsoTime = isoTime
       currentAuthor = author
       currentAdded = 0
       currentDeleted = 0
@@ -343,9 +355,9 @@ async function getGitRows(repoPath: string, branch?: string) {
   return rows
 }
 
-function buildCandles(rows: GitCommitRow[]) {
+function buildAnalysis(rows: GitCommitRow[]): AnalysisSummary {
   const authors = new Set<string>()
-  const candles = new Map<string, Candle>()
+  const commitEvents: Candle[] = []
   let currentLoc = 0
 
   for (const row of rows) {
@@ -354,38 +366,23 @@ function buildCandles(rows: GitCommitRow[]) {
     const delta = row.added - row.deleted
     const after = Math.max(0, before + delta)
     currentLoc = after
-
-    const existing = candles.get(row.day)
-
-    if (!existing) {
-      candles.set(row.day, {
-        day: row.day,
-        open: before,
-        close: after,
-        high: Math.max(before, after),
-        low: Math.min(before, after),
-        volume: row.added + row.deleted,
-        commits: 1,
-      })
-      continue
-    }
-
-    existing.close = after
-    existing.high = Math.max(existing.high, before, after)
-    existing.low = Math.min(existing.low, before, after)
-    existing.volume += row.added + row.deleted
-    existing.commits += 1
+    commitEvents.push({
+      timestamp: row.timestamp,
+      isoTime: row.isoTime,
+      open: before,
+      close: after,
+      high: Math.max(before, after),
+      low: Math.min(before, after),
+      volume: row.added + row.deleted,
+      commits: 1,
+    })
   }
-
-  const candleList = Array.from(candles.values()).sort((left, right) =>
-    left.day.localeCompare(right.day),
-  )
 
   return {
     authorCount: authors.size,
-    latestClose: candleList.at(-1)?.close ?? 0,
-    totalVolume: candleList.reduce((sum, candle) => sum + candle.volume, 0),
-    candles: candleList,
+    latestClose: commitEvents.at(-1)?.close ?? 0,
+    totalVolume: commitEvents.reduce((sum, candle) => sum + candle.volume, 0),
+    commitEvents,
   }
 }
 
@@ -486,7 +483,7 @@ export default defineConfig({
               return
             }
 
-            const analysis = buildCandles(rows)
+            const analysis = buildAnalysis(rows)
 
             sendJson(response, 200, {
               repoPath: absolutePath,
@@ -497,7 +494,7 @@ export default defineConfig({
               authorCount: analysis.authorCount,
               latestClose: analysis.latestClose,
               totalVolume: analysis.totalVolume,
-              candles: analysis.candles,
+              commitEvents: analysis.commitEvents,
             })
           } catch (error) {
             sendJson(response, 400, {

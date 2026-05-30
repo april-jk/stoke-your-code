@@ -666,6 +666,40 @@ select.repo-input:disabled {
   word-break: break-all;
 }
 
+.timeframe-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  padding: 0.18rem;
+  border: 1px solid rgba(161, 177, 192, 0.16);
+  background: rgba(8, 12, 17, 0.72);
+}
+
+.timeframe-tab {
+  min-width: 2.5rem;
+  min-height: 1.9rem;
+  padding: 0.3rem 0.48rem;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+}
+
+.timeframe-tab-active {
+  border-color: rgba(109, 214, 159, 0.34);
+  background: rgba(14, 54, 37, 0.58);
+  color: var(--text);
+}
+
+.timeframe-tabs-overlay {
+  pointer-events: auto;
+  background: rgba(8, 12, 17, 0.88);
+  backdrop-filter: blur(4px);
+}
+
 .chart-header-main {
   display: grid;
   grid-template-columns: auto 1fr;
@@ -730,6 +764,13 @@ select.repo-input:disabled {
   display: inline-flex;
   max-width: min(66%, 48rem);
   pointer-events: none;
+}
+
+.ticker-stack {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.28rem;
 }
 
 .ticker-strip {
@@ -881,6 +922,10 @@ select.repo-input:disabled {
 
   .ticker-strip {
     display: flex;
+    flex-wrap: wrap;
+  }
+
+  .timeframe-tabs {
     flex-wrap: wrap;
   }
 }
