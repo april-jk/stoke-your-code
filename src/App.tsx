@@ -1,5 +1,12 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
+import {
+  CandlestickSeries,
+  ColorType,
+  CrosshairMode,
+  HistogramSeries,
+  createChart,
+} from 'lightweight-charts'
 import './App.css'
 
 type MockCandle = {
@@ -157,6 +164,125 @@ function Chart({
   )
 }
 
+function GitChart({
+  candles,
+}: {
+  candles: AnalysisCandle[]
+}) {
+  const containerRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    const container = containerRef.current
+
+    if (!container || candles.length === 0) {
+      return
+    }
+
+    const chart = createChart(container, {
+      autoSize: true,
+      layout: {
+        background: { type: ColorType.Solid, color: '#0b1117' },
+        textColor: '#8f9aa5',
+      },
+      grid: {
+        vertLines: { color: 'rgba(143, 154, 165, 0.09)' },
+        horzLines: { color: 'rgba(143, 154, 165, 0.09)' },
+      },
+      rightPriceScale: {
+        borderColor: 'rgba(143, 154, 165, 0.18)',
+        scaleMargins: {
+          top: 0.1,
+          bottom: 0.22,
+        },
+      },
+      timeScale: {
+        borderColor: 'rgba(143, 154, 165, 0.18)',
+        timeVisible: true,
+        secondsVisible: false,
+      },
+      crosshair: {
+        mode: CrosshairMode.MagnetOHLC,
+        vertLine: {
+          color: 'rgba(197, 161, 96, 0.35)',
+          labelBackgroundColor: '#5f4a1f',
+        },
+        horzLine: {
+          color: 'rgba(197, 161, 96, 0.35)',
+          labelBackgroundColor: '#5f4a1f',
+        },
+      },
+      handleScroll: {
+        mouseWheel: true,
+        pressedMouseMove: true,
+        horzTouchDrag: true,
+        vertTouchDrag: false,
+      },
+      handleScale: {
+        axisPressedMouseMove: true,
+        mouseWheel: true,
+        pinch: true,
+      },
+    })
+
+    const candleSeries = chart.addSeries(CandlestickSeries, {
+      upColor: '#37c978',
+      downColor: '#e05a57',
+      wickUpColor: '#37c978',
+      wickDownColor: '#e05a57',
+      borderVisible: false,
+      priceLineVisible: true,
+      lastValueVisible: true,
+    })
+
+    const volumeSeries = chart.addSeries(
+      HistogramSeries,
+      {
+        priceFormat: {
+          type: 'volume',
+        },
+        priceScaleId: '',
+      },
+      0,
+    )
+
+    volumeSeries.priceScale().applyOptions({
+      scaleMargins: {
+        top: 0.8,
+        bottom: 0,
+      },
+    })
+
+    candleSeries.setData(
+      candles.map((candle) => ({
+        time: candle.day,
+        open: candle.open,
+        high: candle.high,
+        low: candle.low,
+        close: candle.close,
+      })),
+    )
+
+    volumeSeries.setData(
+      candles.map((candle) => ({
+        time: candle.day,
+        value: candle.volume,
+        color:
+          candle.close >= candle.open
+            ? 'rgba(55, 201, 120, 0.45)'
+            : 'rgba(224, 90, 87, 0.45)',
+      })),
+    )
+
+    chart.timeScale().fitContent()
+
+    return () => {
+      chart.remove()
+    }
+  }, [candles])
+
+  return <div className="git-chart" ref={containerRef} />
+}
+
 function LandingPage() {
   return (
     <main className="app-shell">
@@ -302,6 +428,29 @@ function AnalysisPage() {
     ]
   }, [data, latestCandle, trend])
 
+  useEffect(() => {
+    void (async () => {
+      try {
+        const response = await fetch('/api/analyze', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ repoPath: '/Users/watson/codingProj/stoke-your-code' }),
+        })
+
+        const payload = (await response.json()) as AnalysisResponse | AnalysisError
+
+        if (response.ok) {
+          setData(payload as AnalysisResponse)
+          setRepoPath('/Users/watson/codingProj/stoke-your-code')
+        }
+      } catch {
+        // Keep the page usable even if the initial sample load fails.
+      }
+    })()
+  }, [])
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setLoading(true)
@@ -346,84 +495,87 @@ function AnalysisPage() {
         </a>
       </header>
 
-      <section className="analysis-hero">
-        <div className="analysis-copy">
-          <p className="eyebrow">Local Git repository analysis</p>
-          <h1>Feed in a repo path, render the real candle tape.</h1>
-          <p className="summary">
-            This page validates that the directory exists and contains a Git
-            repository, then converts commit history into daily open, high, low,
-            close, and volume values.
-          </p>
-        </div>
+      <section className="analysis-board">
+        <aside className="analysis-sidebar">
+          <div className="analysis-copy">
+            <p className="eyebrow">Local Git repository analysis</p>
+            <h1>Professional candle tape for code history.</h1>
+            <p className="summary">
+              Feed in a local Git repository. The page validates the path, reads
+              real commit history, and renders daily OHLC candles plus volume in
+              one screen.
+            </p>
+          </div>
 
-        <form className="repo-form" onSubmit={handleSubmit}>
-          <label className="repo-label" htmlFor="repo-path">
-            Local directory path
-          </label>
-          <input
-            id="repo-path"
-            className="repo-input"
-            type="text"
-            value={repoPath}
-            onChange={(event) => setRepoPath(event.target.value)}
-            placeholder="/absolute/path/to/a/git/repository"
-            spellCheck={false}
-          />
-          <button className="primary-link button-link" type="submit" disabled={loading}>
-            {loading ? 'Analyzing repository...' : 'Analyze repository'}
-          </button>
-          <p className="repo-hint">
-            The path must be local and must contain a `.git` directory.
-          </p>
-          {error ? <p className="error-banner">{error}</p> : null}
-        </form>
-      </section>
+          <form className="repo-form" onSubmit={handleSubmit}>
+            <label className="repo-label" htmlFor="repo-path">
+              Local directory path
+            </label>
+            <input
+              id="repo-path"
+              className="repo-input"
+              type="text"
+              value={repoPath}
+              onChange={(event) => setRepoPath(event.target.value)}
+              placeholder="/absolute/path/to/a/git/repository"
+              spellCheck={false}
+            />
+            <button className="primary-link button-link" type="submit" disabled={loading}>
+              {loading ? 'Analyzing repository...' : 'Analyze repository'}
+            </button>
+            <p className="repo-hint">
+              Path must be local and include a `.git` directory.
+            </p>
+            {error ? <p className="error-banner">{error}</p> : null}
+          </form>
 
-      {data ? (
-        <>
-          <section className="analysis-summary">
-            <div className="summary-panel">
-              <p className="panel-label">ANALYZED REPOSITORY</p>
-              <h2>{data.repoPath}</h2>
-            </div>
-            <div className="metric-strip metric-strip-wide">
-              {metricCards.map((metric) => (
-                <article className="metric" key={metric.label}>
+          <div className="analysis-metrics">
+            {metricCards.length > 0 ? (
+              metricCards.map((metric) => (
+                <article className="analysis-metric" key={metric.label}>
                   <p className="metric-label">{metric.label}</p>
                   <p className={`metric-value ${metric.tone}`}>{metric.value}</p>
                 </article>
-              ))}
-            </div>
-          </section>
-
-          <section className="chart-panel">
-            <div className="chart-header">
-              <div>
-                <p className="panel-label">REAL GIT OUTPUT</p>
-                <h2>Daily OHLC from commit history</h2>
+              ))
+            ) : (
+              <div className="empty-analysis">
+                <p className="panel-label">READY</p>
+                <h2>No repository loaded yet.</h2>
+                <p>
+                  Load a local Git repo to replace this placeholder with a real
+                  chart and metrics.
+                </p>
               </div>
-              <div className="panel-stats">
-                <span>{data.candles.length} trading days of code</span>
-                <span className={trend !== null && trend >= 0 ? 'positive' : 'negative'}>
-                  {trend === null ? 'n/a' : `${trend >= 0 ? '+' : ''}${trend.toFixed(1)}%`}
-                </span>
-              </div>
-            </div>
+            )}
+          </div>
+        </aside>
 
-            <Chart candles={data.candles} metricLabel="" />
-          </section>
-        </>
-      ) : (
-        <section className="empty-analysis">
-          <p className="panel-label">READY</p>
-          <h2>No repository loaded yet.</h2>
-          <p>
-            Enter a local Git path above and this page will replace the placeholder
-            story with real daily candles.
-          </p>
+        <section className="analysis-chart-panel">
+          <div className="chart-header chart-header-tight">
+            <div>
+              <p className="panel-label">REAL GIT OUTPUT</p>
+              <h2>{data ? data.repoPath : 'Awaiting repository input'}</h2>
+            </div>
+            <div className="panel-stats">
+              <span>{data ? `${data.candles.length} trading days of code` : 'No data loaded'}</span>
+              <span className={trend !== null && trend >= 0 ? 'positive' : 'negative'}>
+                {trend === null ? 'n/a' : `${trend >= 0 ? '+' : ''}${trend.toFixed(1)}%`}
+              </span>
+            </div>
+          </div>
+
+          <div className="analysis-chart-shell">
+            {data ? (
+              <GitChart candles={data.candles} />
+            ) : (
+              <div className="analysis-chart-placeholder">
+                <p className="panel-label">CHART STANDBY</p>
+                <p>Enter a valid Git repository path to render the candle tape.</p>
+              </div>
+            )}
+          </div>
         </section>
-      )}
+      </section>
     </main>
   )
 }
