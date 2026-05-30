@@ -519,6 +519,7 @@ function AnalysisPage() {
     infoCandle && infoCandle.open !== 0
       ? (infoDelta! / Math.abs(infoCandle.open)) * 100
       : null
+  const infoDayLabel = infoCandle?.day ?? null
 
   useEffect(() => {
     void (async () => {
@@ -653,8 +654,15 @@ function AnalysisPage() {
             </div>
             <div className="panel-stats">
               <span>{data ? `${data.candles.length} trading days of code` : 'No data loaded'}</span>
-              <span className={trend !== null && trend >= 0 ? 'positive' : 'negative'}>
-                {trend === null ? 'n/a' : `${trend >= 0 ? '+' : ''}${trend.toFixed(1)}%`}
+              <span className="panel-stats-focus-label">
+                {infoDayLabel ? `session ${infoDayLabel}` : 'latest move'}
+              </span>
+              <span
+                className={`panel-stats-focus ${infoPercent !== null && infoPercent >= 0 ? 'positive' : 'negative'}`}
+              >
+                {infoPercent !== null
+                  ? `${infoPercent >= 0 ? '+' : ''}${infoPercent.toFixed(2)}%`
+                  : 'n/a'}
               </span>
             </div>
           </div>
@@ -688,12 +696,6 @@ function AnalysisPage() {
                       <span className="ticker-label">CHG</span>
                       <span className={`ticker-value ${infoDelta !== null && infoDelta >= 0 ? 'positive' : 'negative'}`}>
                         {infoDelta !== null ? `${infoDelta >= 0 ? '+' : ''}${formatCompact(infoDelta)}` : 'n/a'}
-                      </span>
-                    </div>
-                    <div className="ticker-item">
-                      <span className="ticker-label">%</span>
-                      <span className={`ticker-value ${infoPercent !== null && infoPercent >= 0 ? 'positive' : 'negative'}`}>
-                        {infoPercent !== null ? `${infoPercent >= 0 ? '+' : ''}${infoPercent.toFixed(2)}%` : 'n/a'}
                       </span>
                     </div>
                     <div className="ticker-item">

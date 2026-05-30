@@ -190,6 +190,19 @@
   font-size: 0.82rem;
 }
 
+.panel-stats-focus-label {
+  color: var(--muted);
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.panel-stats-focus {
+  font-size: 1.55rem;
+  line-height: 1;
+  letter-spacing: -0.04em;
+}
+
 .positive {
   color: var(--positive);
 }
