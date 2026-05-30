@@ -414,7 +414,21 @@
 
 .analysis-copy {
   display: grid;
-  gap: 0.8rem;
+  gap: 0.65rem;
+  padding: 1rem 1.1rem;
+}
+
+.analysis-copy h1 {
+  margin: 0;
+  max-width: 8ch;
+  font-size: clamp(2.3rem, 4vw, 4.3rem);
+  line-height: 0.92;
+  letter-spacing: -0.06em;
+}
+
+.analysis-copy .summary {
+  font-size: 0.9rem;
+  line-height: 1.5;
 }
 
 .repo-form {
@@ -502,7 +516,7 @@
   padding: 1rem;
   display: grid;
   grid-template-rows: auto 1fr;
-  gap: 1rem;
+  gap: 0.7rem;
   overflow: hidden;
 }
 
@@ -540,10 +554,10 @@
 
 .floating-ticker {
   position: absolute;
-  top: 0.45rem;
+  top: 0.35rem;
   left: 0.75rem;
   display: inline-flex;
-  max-width: min(72%, 52rem);
+  max-width: min(66%, 48rem);
   pointer-events: none;
 }
 
@@ -560,16 +574,16 @@
 .ticker-main,
 .ticker-item {
   flex: 0 0 auto;
-  min-width: 4.8rem;
-  padding: 0.28rem 0.48rem;
+  min-width: 4.1rem;
+  padding: 0.2rem 0.38rem;
   display: inline-flex;
   align-items: baseline;
-  gap: 0.38rem;
+  gap: 0.28rem;
   border-right: 1px solid rgba(161, 177, 192, 0.12);
 }
 
 .ticker-main {
-  min-width: 7.6rem;
+  min-width: 6.8rem;
 }
 
 .ticker-item:last-child {
@@ -579,7 +593,7 @@
 .ticker-label {
   color: var(--muted);
   font-family: var(--mono);
-  font-size: 0.62rem;
+  font-size: 0.56rem;
   letter-spacing: 0.1em;
 }
 
@@ -587,7 +601,7 @@
   min-width: 0;
   color: var(--text);
   font-family: var(--mono);
-  font-size: 0.8rem;
+  font-size: 0.72rem;
   line-height: 1.1;
   white-space: nowrap;
   overflow: hidden;

@@ -288,12 +288,11 @@ function GitChart({
         },
         priceScaleId: '',
       },
-      1,
     )
 
     volumeSeries.priceScale().applyOptions({
       scaleMargins: {
-        top: 0.8,
+        top: 0.78,
         bottom: 0,
       },
     })
