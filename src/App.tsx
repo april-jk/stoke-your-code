@@ -1289,7 +1289,23 @@ function AnalysisPage() {
 }
 
 function App() {
-  return currentRoute() === '/analyze' ? (
+  const [route, setRoute] = useState(currentRoute())
+
+  useEffect(() => {
+    function syncRoute() {
+      setRoute(currentRoute())
+    }
+
+    window.addEventListener('hashchange', syncRoute)
+    window.addEventListener('popstate', syncRoute)
+
+    return () => {
+      window.removeEventListener('hashchange', syncRoute)
+      window.removeEventListener('popstate', syncRoute)
+    }
+  }, [])
+
+  return route === '/analyze' ? (
     <AnalysisPage />
   ) : (
     <LandingPage />
