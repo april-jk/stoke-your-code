@@ -1,6 +1,40 @@
+import { useMemo, useState } from 'react'
+import type { FormEvent } from 'react'
 import './App.css'
 
-const candles = [
+type MockCandle = {
+  day: string
+  open: number
+  close: number
+  high: number
+  low: number
+  volume: number
+}
+
+type AnalysisCandle = {
+  day: string
+  open: number
+  close: number
+  high: number
+  low: number
+  volume: number
+  commits: number
+}
+
+type AnalysisResponse = {
+  repoPath: string
+  commitCount: number
+  authorCount: number
+  latestClose: number
+  totalVolume: number
+  candles: AnalysisCandle[]
+}
+
+type AnalysisError = {
+  error?: string
+}
+
+const landingCandles: MockCandle[] = [
   { day: '05.03', open: 42, close: 68, high: 79, low: 34, volume: 28 },
   { day: '05.06', open: 68, close: 61, high: 82, low: 52, volume: 16 },
   { day: '05.09', open: 61, close: 92, high: 97, low: 58, volume: 31 },
@@ -11,7 +45,7 @@ const candles = [
   { day: '05.24', open: 151, close: 147, high: 176, low: 139, volume: 22 },
 ]
 
-const metrics = [
+const landingMetrics = [
   { label: 'Daily candle', value: 'OHLC from LOC', tone: 'neutral' },
   { label: 'Volume', value: 'added + deleted', tone: 'neutral' },
   { label: 'Repo source', value: 'local Git only', tone: 'positive' },
@@ -25,9 +59,105 @@ const phases = [
   'Show the project trend at a glance',
 ]
 
-function App() {
-  const scale = 1.6
+function formatCompact(value: number) {
+  return new Intl.NumberFormat('en', {
+    notation: 'compact',
+    maximumFractionDigits: value >= 1000 ? 1 : 0,
+  }).format(value)
+}
 
+function Chart({
+  candles,
+  metricLabel = 'LOC',
+  annotate = false,
+}: {
+  candles: MockCandle[] | AnalysisCandle[]
+  metricLabel?: string
+  annotate?: boolean
+}) {
+  const highs = candles.map((candle) => candle.high)
+  const lows = candles.map((candle) => candle.low)
+  const volumes = candles.map((candle) => candle.volume)
+  const top = Math.max(...highs, 1)
+  const bottom = Math.min(...lows, 0)
+  const range = Math.max(top - bottom, 1)
+  const maxVolume = Math.max(...volumes, 1)
+
+  const priceTicks = Array.from({ length: 4 }, (_, index) => {
+    const ratio = index / 3
+    return Math.round(top - ratio * range)
+  })
+
+  return (
+    <div className="chart-stage">
+      <div className="chart-grid" />
+      <div className="price-scale">
+        {priceTicks.map((tick) => (
+          <span key={tick}>
+            {formatCompact(tick)}
+            {metricLabel}
+          </span>
+        ))}
+      </div>
+
+      <div className="candles">
+        {candles.map((candle) => {
+          const bodyLow = Math.min(candle.open, candle.close)
+          const bodyHigh = Math.max(candle.open, candle.close)
+          const bodyBottom = ((bodyLow - bottom) / range) * 100
+          const bodyHeight = Math.max(((bodyHigh - bodyLow) / range) * 100, 3.5)
+          const wickBottom = ((candle.low - bottom) / range) * 100
+          const wickHeight = Math.max(((candle.high - candle.low) / range) * 100, 5)
+          const volumeHeight = Math.max((candle.volume / maxVolume) * 100, 5)
+          const tone = candle.close >= candle.open ? 'up' : 'down'
+
+          return (
+            <div className="candle-column" key={candle.day}>
+              <div className="price-zone">
+                <div
+                  className={`wick ${tone}`}
+                  style={{
+                    height: `${wickHeight}%`,
+                    bottom: `${wickBottom}%`,
+                  }}
+                />
+                <div
+                  className={`body ${tone}`}
+                  style={{
+                    height: `${bodyHeight}%`,
+                    bottom: `${bodyBottom}%`,
+                  }}
+                />
+              </div>
+              <div className="volume-zone">
+                <div
+                  className={`volume-bar ${tone}`}
+                  style={{ height: `${volumeHeight}%` }}
+                />
+              </div>
+              <span className="day-label">{candle.day}</span>
+            </div>
+          )
+        })}
+      </div>
+
+      {annotate ? (
+        <>
+          <div className="annotation annotation-left">
+            <span className="annotation-title">Open</span>
+            <span>codebase starts the day here</span>
+          </div>
+          <div className="annotation annotation-right">
+            <span className="annotation-title">Volume</span>
+            <span>added + deleted lines</span>
+          </div>
+        </>
+      ) : null}
+    </div>
+  )
+}
+
+function LandingPage() {
   return (
     <main className="app-shell">
       <header className="topbar">
@@ -54,6 +184,15 @@ function App() {
             <span className="tag">LOCAL</span>
           </div>
 
+          <div className="hero-actions">
+            <a className="primary-link" href="/analyze">
+              Open analysis page
+            </a>
+            <p className="action-note">
+              Jump straight into a real local Git repository.
+            </p>
+          </div>
+
           <div className="hero-note">
             <strong>Core principle:</strong> the page should explain itself
             before the user touches anything.
@@ -72,69 +211,12 @@ function App() {
             </div>
           </div>
 
-          <div className="chart-stage" aria-hidden="true">
-            <div className="chart-grid" />
-            <div className="price-scale">
-              <span>180k</span>
-              <span>140k</span>
-              <span>100k</span>
-              <span>060k</span>
-            </div>
-
-            <div className="candles">
-              {candles.map((candle) => {
-                const bodyTop = Math.min(candle.open, candle.close) * scale
-                const bodyHeight = Math.max(
-                  Math.abs(candle.close - candle.open) * scale,
-                  10,
-                )
-                const wickTop = candle.high * scale
-                const wickHeight = Math.max((candle.high - candle.low) * scale, 16)
-                const volumeHeight = candle.volume * 2.2
-                const tone = candle.close >= candle.open ? 'up' : 'down'
-
-                return (
-                  <div className="candle-column" key={candle.day}>
-                    <div className="price-zone">
-                      <div
-                        className={`wick ${tone}`}
-                        style={{
-                          height: `${wickHeight}px`,
-                          top: `${288 - wickTop}px`,
-                        }}
-                      />
-                      <div
-                        className={`body ${tone}`}
-                        style={{
-                          height: `${bodyHeight}px`,
-                          top: `${288 - bodyTop - bodyHeight}px`,
-                        }}
-                      />
-                    </div>
-                    <div
-                      className={`volume-bar ${tone}`}
-                      style={{ height: `${volumeHeight}px` }}
-                    />
-                    <span className="day-label">{candle.day}</span>
-                  </div>
-                )
-              })}
-            </div>
-
-            <div className="annotation annotation-left">
-              <span className="annotation-title">Open</span>
-              <span>codebase starts the day here</span>
-            </div>
-            <div className="annotation annotation-right">
-              <span className="annotation-title">Volume</span>
-              <span>added + deleted lines</span>
-            </div>
-          </div>
+          <Chart candles={landingCandles} annotate metricLabel="k" />
         </div>
       </section>
 
       <section className="metric-strip">
-        {metrics.map((metric) => (
+        {landingMetrics.map((metric) => (
           <article className="metric" key={metric.label}>
             <p className="metric-label">{metric.label}</p>
             <p className={`metric-value ${metric.tone}`}>{metric.value}</p>
@@ -178,6 +260,179 @@ function App() {
         </div>
       </section>
     </main>
+  )
+}
+
+function AnalysisPage() {
+  const [repoPath, setRepoPath] = useState('/Users/watson/codingProj/stoke-your-code')
+  const [data, setData] = useState<AnalysisResponse | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  const latestCandle = data?.candles.at(-1) ?? null
+  const trend =
+    latestCandle && latestCandle.open !== 0
+      ? ((latestCandle.close - latestCandle.open) / Math.abs(latestCandle.open)) * 100
+      : null
+
+  const metricCards = useMemo(() => {
+    if (!data || !latestCandle) {
+      return []
+    }
+
+    return [
+      { label: 'Commit days', value: String(data.candles.length), tone: 'neutral' },
+      { label: 'Total commits', value: String(data.commitCount), tone: 'neutral' },
+      { label: 'Active authors', value: String(data.authorCount), tone: 'neutral' },
+      {
+        label: 'Latest close',
+        value: `${formatCompact(data.latestClose)} LOC`,
+        tone: latestCandle.close >= latestCandle.open ? 'positive' : 'negative',
+      },
+      {
+        label: 'Latest session',
+        value: trend === null ? 'n/a' : `${trend >= 0 ? '+' : ''}${trend.toFixed(1)}%`,
+        tone: trend !== null && trend >= 0 ? 'positive' : 'negative',
+      },
+      {
+        label: 'Total volume',
+        value: formatCompact(data.totalVolume),
+        tone: 'warning',
+      },
+    ]
+  }, [data, latestCandle, trend])
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setLoading(true)
+    setError('')
+
+    try {
+      const response = await fetch('/api/analyze', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ repoPath }),
+      })
+
+      const payload = (await response.json()) as AnalysisResponse | AnalysisError
+
+      if (!response.ok) {
+        throw new Error(
+          'error' in payload ? payload.error ?? 'Failed to analyze repository' : 'Failed to analyze repository',
+        )
+      }
+
+      setData(payload as AnalysisResponse)
+    } catch (submitError) {
+      setData(null)
+      setError(
+        submitError instanceof Error
+          ? submitError.message
+          : 'Failed to analyze repository',
+      )
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <main className="app-shell analysis-shell">
+      <header className="topbar">
+        <p className="brand">STOKE YOUR CODE / ANALYZE</p>
+        <a className="back-link" href="/">
+          Back to landing page
+        </a>
+      </header>
+
+      <section className="analysis-hero">
+        <div className="analysis-copy">
+          <p className="eyebrow">Local Git repository analysis</p>
+          <h1>Feed in a repo path, render the real candle tape.</h1>
+          <p className="summary">
+            This page validates that the directory exists and contains a Git
+            repository, then converts commit history into daily open, high, low,
+            close, and volume values.
+          </p>
+        </div>
+
+        <form className="repo-form" onSubmit={handleSubmit}>
+          <label className="repo-label" htmlFor="repo-path">
+            Local directory path
+          </label>
+          <input
+            id="repo-path"
+            className="repo-input"
+            type="text"
+            value={repoPath}
+            onChange={(event) => setRepoPath(event.target.value)}
+            placeholder="/absolute/path/to/a/git/repository"
+            spellCheck={false}
+          />
+          <button className="primary-link button-link" type="submit" disabled={loading}>
+            {loading ? 'Analyzing repository...' : 'Analyze repository'}
+          </button>
+          <p className="repo-hint">
+            The path must be local and must contain a `.git` directory.
+          </p>
+          {error ? <p className="error-banner">{error}</p> : null}
+        </form>
+      </section>
+
+      {data ? (
+        <>
+          <section className="analysis-summary">
+            <div className="summary-panel">
+              <p className="panel-label">ANALYZED REPOSITORY</p>
+              <h2>{data.repoPath}</h2>
+            </div>
+            <div className="metric-strip metric-strip-wide">
+              {metricCards.map((metric) => (
+                <article className="metric" key={metric.label}>
+                  <p className="metric-label">{metric.label}</p>
+                  <p className={`metric-value ${metric.tone}`}>{metric.value}</p>
+                </article>
+              ))}
+            </div>
+          </section>
+
+          <section className="chart-panel">
+            <div className="chart-header">
+              <div>
+                <p className="panel-label">REAL GIT OUTPUT</p>
+                <h2>Daily OHLC from commit history</h2>
+              </div>
+              <div className="panel-stats">
+                <span>{data.candles.length} trading days of code</span>
+                <span className={trend !== null && trend >= 0 ? 'positive' : 'negative'}>
+                  {trend === null ? 'n/a' : `${trend >= 0 ? '+' : ''}${trend.toFixed(1)}%`}
+                </span>
+              </div>
+            </div>
+
+            <Chart candles={data.candles} metricLabel="" />
+          </section>
+        </>
+      ) : (
+        <section className="empty-analysis">
+          <p className="panel-label">READY</p>
+          <h2>No repository loaded yet.</h2>
+          <p>
+            Enter a local Git path above and this page will replace the placeholder
+            story with real daily candles.
+          </p>
+        </section>
+      )}
+    </main>
+  )
+}
+
+function App() {
+  return window.location.pathname === '/analyze' ? (
+    <AnalysisPage />
+  ) : (
+    <LandingPage />
   )
 }
 
