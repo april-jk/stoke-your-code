@@ -680,8 +680,8 @@ function AnalysisPage() {
             <h1>Professional candle tape for code history.</h1>
             <p className="summary">
               {sourceMode === 'github'
-                ? 'Point the analyzer at a GitHub repository URL. The service clones or refreshes the remote repository, reads commit history, and renders daily OHLC candles plus volume in one screen.'
-                : 'Feed in a local Git repository. The page validates the path, reads real commit history, and renders daily OHLC candles plus volume in one screen.'}
+                ? 'Remote GitHub repository. Clone, parse, and render OHLC plus volume in a single terminal-style view.'
+                : 'Local Git repository. Read commit history and turn daily code churn into one clear candle tape.'}
             </p>
           </div>
 
