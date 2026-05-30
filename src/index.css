@@ -1,0 +1,77 @@
+:root {
+  --bg: oklch(0.16 0.012 230);
+  --panel: oklch(0.2 0.014 230);
+  --line: rgba(161, 177, 192, 0.18);
+  --text: oklch(0.92 0.01 230);
+  --text-soft: oklch(0.76 0.015 230);
+  --muted: oklch(0.62 0.018 230);
+  --positive: oklch(0.77 0.17 155);
+  --negative: oklch(0.68 0.19 24);
+  --accent: oklch(0.78 0.08 78);
+  --mono:
+    'SFMono-Regular', 'SF Mono', ui-monospace, 'Cascadia Code', 'Source Code Pro',
+    Menlo, Consolas, monospace;
+  --sans:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+
+  font-family: var(--sans);
+  line-height: 1.5;
+  font-weight: 400;
+  color: var(--text);
+  background:
+    radial-gradient(circle at top, rgba(33, 87, 69, 0.12), transparent 30%),
+    linear-gradient(180deg, #0a0f14, #0d1117 34%, #0a0e14 100%);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.015) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.015) 1px, transparent 1px),
+    radial-gradient(circle at top, rgba(33, 87, 69, 0.11), transparent 35%),
+    var(--bg);
+  background-size: 48px 48px, 48px 48px, auto, auto;
+}
+
+a {
+  color: inherit;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+#root {
+  width: min(1360px, 100%);
+  margin: 0 auto;
+  min-height: 100vh;
+}
+
+h1 {
+  font-size: clamp(3rem, 5vw, 5.5rem);
+  line-height: 0.95;
+  letter-spacing: -0.06em;
+}
+
+h2,
+h3,
+p {
+  margin-block: 0;
+}
