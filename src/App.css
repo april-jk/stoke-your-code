@@ -387,6 +387,11 @@
   grid-template-columns: minmax(22rem, 25rem) minmax(0, 1fr);
   gap: 1rem;
   overflow: hidden;
+  transition: grid-template-columns 180ms ease-out;
+}
+
+.analysis-board-collapsed {
+  grid-template-columns: 0 minmax(0, 1fr);
 }
 
 .analysis-sidebar,
@@ -405,6 +410,16 @@
   gap: 1rem;
   padding: 1rem;
   overflow: hidden;
+  transition:
+    opacity 140ms ease-out,
+    padding 140ms ease-out,
+    border-color 140ms ease-out;
+}
+
+.analysis-sidebar-collapsed {
+  opacity: 0;
+  padding: 0;
+  border-color: transparent;
 }
 
 .analysis-copy,
@@ -538,6 +553,38 @@
   font-size: 1.05rem;
   line-height: 1.2;
   word-break: break-all;
+}
+
+.chart-header-main {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 0.75rem;
+  row-gap: 0.1rem;
+  align-items: start;
+}
+
+.chart-header-main .panel-label,
+.chart-header-main h2 {
+  grid-column: 2;
+}
+
+.collapse-toggle {
+  grid-row: 1 / span 2;
+  width: 2rem;
+  height: 2rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(161, 177, 192, 0.18);
+  background: rgba(8, 12, 17, 0.72);
+  color: var(--text-soft);
+  font-family: var(--mono);
+  cursor: pointer;
+}
+
+.collapse-toggle:hover {
+  border-color: rgba(109, 214, 159, 0.35);
+  color: var(--text);
 }
 
 .analysis-chart-shell {

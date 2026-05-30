@@ -479,6 +479,7 @@ function AnalysisPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [hoveredCandle, setHoveredCandle] = useState<HoverSnapshot | null>(null)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
 
   const latestCandle = data?.candles.at(-1) ?? null
   const trend =
@@ -519,7 +520,6 @@ function AnalysisPage() {
     infoCandle && infoCandle.open !== 0
       ? (infoDelta! / Math.abs(infoCandle.open)) * 100
       : null
-  const infoDayLabel = infoCandle?.day ?? null
 
   useEffect(() => {
     void (async () => {
@@ -591,8 +591,12 @@ function AnalysisPage() {
         </a>
       </header>
 
-      <section className="analysis-board">
-        <aside className="analysis-sidebar">
+      <section
+        className={`analysis-board ${sidebarCollapsed ? 'analysis-board-collapsed' : ''}`}
+      >
+        <aside
+          className={`analysis-sidebar ${sidebarCollapsed ? 'analysis-sidebar-collapsed' : ''}`}
+        >
           <div className="analysis-copy">
             <p className="eyebrow">Local Git repository analysis</p>
             <h1>Professional candle tape for code history.</h1>
@@ -648,15 +652,21 @@ function AnalysisPage() {
 
         <section className="analysis-chart-panel">
           <div className="chart-header chart-header-tight">
-            <div>
+            <div className="chart-header-main">
+              <button
+                type="button"
+                className="collapse-toggle"
+                onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}
+                aria-label={sidebarCollapsed ? 'Expand left panel' : 'Collapse left panel'}
+                title={sidebarCollapsed ? 'Expand left panel' : 'Collapse left panel'}
+              >
+                {sidebarCollapsed ? '>' : '<'}
+              </button>
               <p className="panel-label">REAL GIT OUTPUT</p>
               <h2>{data ? data.repoPath : 'Awaiting repository input'}</h2>
             </div>
             <div className="panel-stats">
               <span>{data ? `${data.candles.length} trading days of code` : 'No data loaded'}</span>
-              <span className="panel-stats-focus-label">
-                {infoDayLabel ? `session ${infoDayLabel}` : 'latest move'}
-              </span>
               <span
                 className={`panel-stats-focus ${infoPercent !== null && infoPercent >= 0 ? 'positive' : 'negative'}`}
               >
