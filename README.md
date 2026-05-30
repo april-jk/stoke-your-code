@@ -4,6 +4,8 @@
 
 Stoke Your Code is a trading-terminal style Git history viewer. It turns repository movement into OHLC candles and volume bars so you can read a codebase like a market chart.
 
+Live project page: [https://april-jk.github.io/stoke-your-code/](https://april-jk.github.io/stoke-your-code/)
+
 The project supports:
 - Local Git repositories
 - GitHub repositories
@@ -57,6 +59,14 @@ npm run dev
 ```
 
 Open the local Vite URL, usually [http://localhost:5173](http://localhost:5173).
+
+## GitHub Pages
+
+The public Pages site is a static presentation build:
+
+- Landing page is fully available online
+- Analysis page opens in demo mode with sample repository data
+- Real local Git analysis and live GitHub clone/fetch analysis still require the local dev server or a backend runtime
 
 ## Scripts
 

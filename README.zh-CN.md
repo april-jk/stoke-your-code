@@ -4,6 +4,8 @@
 
 Stoke Your Code 是一个偏交易终端风格的 Git 历史可视化工具。它把代码仓库的变化转换成 K 线与成交量，让你像看市场走势图一样看懂一个项目的演化过程。
 
+在线页面：[https://april-jk.github.io/stoke-your-code/](https://april-jk.github.io/stoke-your-code/)
+
 当前支持：
 - 本地 Git 仓库分析
 - GitHub 仓库分析
@@ -58,6 +60,14 @@ npm run dev
 ```
 
 然后打开本地 Vite 地址，通常是 [http://localhost:5173](http://localhost:5173)。
+
+## GitHub Pages
+
+公开 Pages 站点是一个静态展示版本：
+
+- 落地页可以完整在线访问
+- 分析页会以 demo 模式展示示例仓库数据
+- 真正的本地 Git 分析和实时 GitHub clone/fetch 分析仍然需要本地 dev server 或后端运行时支持
 
 ## 常用脚本
 

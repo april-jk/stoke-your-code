@@ -67,6 +67,10 @@ type HoverSnapshot = {
 type RepoSourceMode = 'local' | 'github'
 type Timeframe = '5m' | '1h' | '1d' | '1w' | '1m'
 
+const appBaseUrl = import.meta.env.BASE_URL
+const isStaticDeploy =
+  typeof window !== 'undefined' && window.location.hostname.endsWith('github.io')
+
 function describeAnalyzeStage(stage: string, sourceMode: RepoSourceMode) {
   switch (stage) {
     case 'validating-local':
@@ -121,11 +125,74 @@ const phases = [
   'Read the codebase at a glance',
 ]
 
+const demoCommitEvents: AnalysisCandle[] = [
+  { timestamp: 1748478600, isoTime: '2025-05-29T01:10:00.000Z', open: 116200, close: 117850, high: 118100, low: 115900, volume: 2200, commits: 3 },
+  { timestamp: 1748489400, isoTime: '2025-05-29T04:10:00.000Z', open: 117850, close: 117300, high: 118420, low: 117120, volume: 1480, commits: 2 },
+  { timestamp: 1748504700, isoTime: '2025-05-29T08:25:00.000Z', open: 117300, close: 119640, high: 120080, low: 117220, volume: 3410, commits: 4 },
+  { timestamp: 1748520900, isoTime: '2025-05-29T12:55:00.000Z', open: 119640, close: 121920, high: 122250, low: 119480, volume: 2980, commits: 3 },
+  { timestamp: 1748561400, isoTime: '2025-05-30T00:10:00.000Z', open: 121920, close: 121100, high: 122480, low: 120760, volume: 1730, commits: 2 },
+  { timestamp: 1748572200, isoTime: '2025-05-30T03:10:00.000Z', open: 121100, close: 123760, high: 124040, low: 120940, volume: 3620, commits: 4 },
+  { timestamp: 1748589300, isoTime: '2025-05-30T07:55:00.000Z', open: 123760, close: 122880, high: 124200, low: 122330, volume: 2140, commits: 2 },
+  { timestamp: 1748604600, isoTime: '2025-05-30T12:10:00.000Z', open: 122880, close: 126420, high: 126900, low: 122640, volume: 4050, commits: 5 },
+  { timestamp: 1748647800, isoTime: '2025-05-31T00:10:00.000Z', open: 126420, close: 128140, high: 128480, low: 125980, volume: 2550, commits: 3 },
+  { timestamp: 1748657400, isoTime: '2025-05-31T02:50:00.000Z', open: 128140, close: 127460, high: 128820, low: 127120, volume: 1610, commits: 2 },
+  { timestamp: 1748673600, isoTime: '2025-05-31T07:20:00.000Z', open: 127460, close: 130980, high: 131560, low: 127320, volume: 4470, commits: 5 },
+  { timestamp: 1748691000, isoTime: '2025-05-31T12:10:00.000Z', open: 130980, close: 132540, high: 133120, low: 130620, volume: 2860, commits: 3 },
+]
+
+const demoAnalysisData: AnalysisResponse = {
+  repoPath: 'https://github.com/1Panel-dev/MaxKB',
+  displayName: '1Panel-dev/MaxKB',
+  source: 'github',
+  stages: ['validating-github', 'analyzing-history'],
+  commitCount: demoCommitEvents.reduce((total, candle) => total + candle.commits, 0),
+  authorCount: 6,
+  latestClose: demoCommitEvents.at(-1)?.close ?? 0,
+  totalVolume: demoCommitEvents.reduce((total, candle) => total + candle.volume, 0),
+  commitEvents: demoCommitEvents,
+}
+
 function formatCompact(value: number) {
   return new Intl.NumberFormat('en', {
     notation: 'compact',
     maximumFractionDigits: value >= 1000 ? 1 : 0,
   }).format(value)
+}
+
+function normalizeBasePath(baseUrl: string) {
+  if (!baseUrl || baseUrl === '/') {
+    return '/'
+  }
+
+  return baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl
+}
+
+function currentRoute() {
+  if (typeof window === 'undefined') {
+    return '/'
+  }
+
+  if (window.location.hash.startsWith('#/')) {
+    return window.location.hash.slice(1)
+  }
+
+  const basePath = normalizeBasePath(appBaseUrl)
+  const pathname = window.location.pathname
+
+  if (basePath !== '/' && pathname.startsWith(basePath)) {
+    const nextPath = pathname.slice(basePath.length)
+    return nextPath.startsWith('/') ? nextPath : `/${nextPath || ''}`
+  }
+
+  return pathname || '/'
+}
+
+function routeHref(route: '/' | '/analyze') {
+  if (isStaticDeploy) {
+    return `${appBaseUrl}#${route}`
+  }
+
+  return route
 }
 
 function formatChartTime(
@@ -553,7 +620,7 @@ function LandingPage() {
           </div>
 
           <div className="hero-actions">
-            <a className="primary-link" href="/analyze">
+            <a className="primary-link" href={routeHref('/analyze')}>
               Launch analysis terminal
             </a>
             <p className="action-note">
@@ -648,6 +715,7 @@ function AnalysisPage() {
   const [statusMessage, setStatusMessage] = useState('')
   const [statusKind, setStatusKind] = useState<'idle' | 'loading' | 'success'>('idle')
   const [timeframe, setTimeframe] = useState<Timeframe>('1d')
+  const [demoMode] = useState(isStaticDeploy)
   const trimmedRepoUrl = repoUrl.trim()
   const trimmedRepoPath = repoPath.trim()
   const timeframeCandles = useMemo(
@@ -696,6 +764,10 @@ function AnalysisPage() {
       : null
 
   useEffect(() => {
+    if (demoMode) {
+      return
+    }
+
     const branchSourceValue =
       sourceMode === 'github' ? trimmedRepoUrl : trimmedRepoPath
 
@@ -769,9 +841,22 @@ function AnalysisPage() {
       controller.abort()
       window.clearTimeout(timeoutId)
     }
-  }, [sourceMode, trimmedRepoPath, trimmedRepoUrl])
+  }, [demoMode, sourceMode, trimmedRepoPath, trimmedRepoUrl])
 
   useEffect(() => {
+    if (demoMode) {
+      setData(demoAnalysisData)
+      setHoveredCandle(null)
+      setSourceMode('github')
+      setRepoUrl(demoAnalysisData.repoPath)
+      setAvailableBranches(['main'])
+      setDefaultBranch('main')
+      setBranch('main')
+      setStatusKind('success')
+      setStatusMessage('GitHub Pages demo mode loaded. Live repository analysis stays available in local/dev runtime.')
+      return
+    }
+
     void (async () => {
       try {
         const response = await fetch('/api/analyze', {
@@ -798,7 +883,7 @@ function AnalysisPage() {
         // Keep the page usable even if the initial sample load fails.
       }
     })()
-  }, [])
+  }, [demoMode])
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -885,7 +970,7 @@ function AnalysisPage() {
     <main className="app-shell analysis-shell">
       <header className="topbar">
         <p className="brand">STOKE YOUR CODE / ANALYZE</p>
-        <a className="back-link" href="/">
+        <a className="back-link" href={routeHref('/')}>
           Back to landing page
         </a>
       </header>
@@ -908,6 +993,11 @@ function AnalysisPage() {
                 ? 'Remote GitHub repository. Clone, parse, and render OHLC plus volume in a single terminal-style view.'
                 : 'Local Git repository. Read commit history and turn daily code churn into one clear candle tape.'}
             </p>
+            {demoMode ? (
+              <p className="repo-hint">
+                GitHub Pages runs a static demo. Real local-path and live GitHub analysis require the local dev server or a backend runtime.
+              </p>
+            ) : null}
           </div>
 
           <form className="repo-form" onSubmit={handleSubmit}>
@@ -952,6 +1042,7 @@ function AnalysisPage() {
                   }}
                   placeholder="https://github.com/owner/repo"
                   spellCheck={false}
+                  disabled={demoMode}
                 />
                 <label className="repo-label" htmlFor="repo-branch">
                   Branch, optional
@@ -961,7 +1052,7 @@ function AnalysisPage() {
                   className="repo-input"
                   value={branch}
                   onChange={(event) => setBranch(event.target.value)}
-                  disabled={!trimmedRepoUrl || branchesLoading || availableBranches.length === 0}
+                  disabled={demoMode || !trimmedRepoUrl || branchesLoading || availableBranches.length === 0}
                 >
                   <option value="">
                     {!trimmedRepoUrl
@@ -1006,6 +1097,7 @@ function AnalysisPage() {
                   }}
                   placeholder="/absolute/path/to/a/git/repository"
                   spellCheck={false}
+                  disabled={demoMode}
                 />
                 <label className="repo-label" htmlFor="repo-branch-local">
                   Branch, optional
@@ -1015,7 +1107,7 @@ function AnalysisPage() {
                   className="repo-input"
                   value={branch}
                   onChange={(event) => setBranch(event.target.value)}
-                  disabled={!trimmedRepoPath || branchesLoading || availableBranches.length === 0}
+                  disabled={demoMode || !trimmedRepoPath || branchesLoading || availableBranches.length === 0}
                 >
                   <option value="">
                     {!trimmedRepoPath
@@ -1037,17 +1129,23 @@ function AnalysisPage() {
                 ) : null}
               </>
             )}
-            <button className="primary-link button-link" type="submit" disabled={loading}>
+            <button className="primary-link button-link" type="submit" disabled={loading || demoMode}>
               {loading
                 ? sourceMode === 'github'
                   ? 'Cloning and analyzing repository...'
                   : 'Analyzing repository...'
-                : 'Analyze repository'}
+                : demoMode
+                  ? 'Demo mode on GitHub Pages'
+                  : 'Analyze repository'}
             </button>
             <p className="repo-hint">
               {sourceMode === 'github'
-                ? 'Public GitHub repository URL, or a private repository if your server has credentials configured.'
-                : 'Path must be local and include a `.git` directory. Branch selection scopes the chart to one branch.'}
+                ? demoMode
+                  ? 'Static deploy previewing a sample GitHub repository tape.'
+                  : 'Public GitHub repository URL, or a private repository if your server has credentials configured.'
+                : demoMode
+                  ? 'Local repository analysis is disabled on GitHub Pages because browsers cannot read your filesystem Git history.'
+                  : 'Path must be local and include a `.git` directory. Branch selection scopes the chart to one branch.'}
             </p>
             {loading || statusMessage ? (
               <p className={`status-banner status-banner-${statusKind}`}>
@@ -1191,7 +1289,7 @@ function AnalysisPage() {
 }
 
 function App() {
-  return window.location.pathname === '/analyze' ? (
+  return currentRoute() === '/analyze' ? (
     <AnalysisPage />
   ) : (
     <LandingPage />

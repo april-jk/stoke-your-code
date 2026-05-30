@@ -5,6 +5,8 @@ import path from 'node:path'
 import { execFile } from 'node:child_process'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 
+const base = process.env.GITHUB_PAGES === 'true' ? '/stoke-your-code/' : '/'
+
 type GitCommitRow = {
   timestamp: number
   isoTime: string
@@ -388,6 +390,7 @@ function buildAnalysis(rows: GitCommitRow[]): AnalysisSummary {
 
 // https://vite.dev/config/
 export default defineConfig({
+  base,
   server: {
     middlewareMode: false,
   },
