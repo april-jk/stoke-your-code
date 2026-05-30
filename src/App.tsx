@@ -9,6 +9,7 @@ import {
   createChart,
 } from 'lightweight-charts'
 import './App.css'
+import demoAnalysisData from './demo-analysis.json'
 
 type MockCandle = {
   label: string
@@ -125,32 +126,7 @@ const phases = [
   'Read the codebase at a glance',
 ]
 
-const demoCommitEvents: AnalysisCandle[] = [
-  { timestamp: 1748478600, isoTime: '2025-05-29T01:10:00.000Z', open: 116200, close: 117850, high: 118100, low: 115900, volume: 2200, commits: 3 },
-  { timestamp: 1748489400, isoTime: '2025-05-29T04:10:00.000Z', open: 117850, close: 117300, high: 118420, low: 117120, volume: 1480, commits: 2 },
-  { timestamp: 1748504700, isoTime: '2025-05-29T08:25:00.000Z', open: 117300, close: 119640, high: 120080, low: 117220, volume: 3410, commits: 4 },
-  { timestamp: 1748520900, isoTime: '2025-05-29T12:55:00.000Z', open: 119640, close: 121920, high: 122250, low: 119480, volume: 2980, commits: 3 },
-  { timestamp: 1748561400, isoTime: '2025-05-30T00:10:00.000Z', open: 121920, close: 121100, high: 122480, low: 120760, volume: 1730, commits: 2 },
-  { timestamp: 1748572200, isoTime: '2025-05-30T03:10:00.000Z', open: 121100, close: 123760, high: 124040, low: 120940, volume: 3620, commits: 4 },
-  { timestamp: 1748589300, isoTime: '2025-05-30T07:55:00.000Z', open: 123760, close: 122880, high: 124200, low: 122330, volume: 2140, commits: 2 },
-  { timestamp: 1748604600, isoTime: '2025-05-30T12:10:00.000Z', open: 122880, close: 126420, high: 126900, low: 122640, volume: 4050, commits: 5 },
-  { timestamp: 1748647800, isoTime: '2025-05-31T00:10:00.000Z', open: 126420, close: 128140, high: 128480, low: 125980, volume: 2550, commits: 3 },
-  { timestamp: 1748657400, isoTime: '2025-05-31T02:50:00.000Z', open: 128140, close: 127460, high: 128820, low: 127120, volume: 1610, commits: 2 },
-  { timestamp: 1748673600, isoTime: '2025-05-31T07:20:00.000Z', open: 127460, close: 130980, high: 131560, low: 127320, volume: 4470, commits: 5 },
-  { timestamp: 1748691000, isoTime: '2025-05-31T12:10:00.000Z', open: 130980, close: 132540, high: 133120, low: 130620, volume: 2860, commits: 3 },
-]
-
-const demoAnalysisData: AnalysisResponse = {
-  repoPath: 'https://github.com/1Panel-dev/MaxKB',
-  displayName: '1Panel-dev/MaxKB',
-  source: 'github',
-  stages: ['validating-github', 'analyzing-history'],
-  commitCount: demoCommitEvents.reduce((total, candle) => total + candle.commits, 0),
-  authorCount: 6,
-  latestClose: demoCommitEvents.at(-1)?.close ?? 0,
-  totalVolume: demoCommitEvents.reduce((total, candle) => total + candle.volume, 0),
-  commitEvents: demoCommitEvents,
-}
+const demoAnalysis = demoAnalysisData as AnalysisResponse
 
 function formatCompact(value: number) {
   return new Intl.NumberFormat('en', {
@@ -845,10 +821,10 @@ function AnalysisPage() {
 
   useEffect(() => {
     if (demoMode) {
-      setData(demoAnalysisData)
+      setData(demoAnalysis)
       setHoveredCandle(null)
       setSourceMode('github')
-      setRepoUrl(demoAnalysisData.repoPath)
+      setRepoUrl(demoAnalysis.repoPath)
       setAvailableBranches(['main'])
       setDefaultBranch('main')
       setBranch('main')
