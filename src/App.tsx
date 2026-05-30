@@ -108,17 +108,17 @@ const timeframeOptions: Array<{ label: string; value: Timeframe }> = [
 ]
 
 const landingMetrics = [
-  { label: 'Daily candle', value: 'OHLC from LOC', tone: 'neutral' },
+  { label: 'Signal', value: 'OHLC from LOC', tone: 'neutral' },
   { label: 'Volume', value: 'added + deleted', tone: 'neutral' },
-  { label: 'Repo source', value: 'local Git only', tone: 'positive' },
-  { label: 'Interaction', value: 'open and understand', tone: 'warning' },
+  { label: 'Input', value: 'local or GitHub', tone: 'positive' },
+  { label: 'Read time', value: 'one screen', tone: 'warning' },
 ]
 
 const phases = [
-  'Import a local repository',
-  'Read commit history day by day',
-  'Convert churn into candles',
-  'Show the project trend at a glance',
+  'Point at a repository',
+  'Parse the raw Git tape',
+  'Bucket movement into OHLC',
+  'Read the codebase at a glance',
 ]
 
 function formatCompact(value: number) {
@@ -519,16 +519,32 @@ function LandingPage() {
 
       <section className="hero-grid">
         <div className="hero-copy">
-          <p className="eyebrow">Read a codebase like a market chart</p>
+          <p className="eyebrow">A trading screen for software history</p>
           <h1>
-            Turn Git history into a daily candlestick that makes code change
-            obvious.
+            Turn raw Git churn into a candle tape that explains a codebase in
+            one glance.
           </h1>
           <p className="summary">
-            Stoke Your Code takes a local repository, extracts its day-by-day
-            churn, and renders the project as a K-line. No commit archaeology,
-            no dashboard maze, just one glance and the story is there.
+            Stoke Your Code turns commit movement into an OHLC view of the
+            repository itself. Expansion, contraction, volatility, and bursts
+            of activity show up immediately, without commit archaeology or
+            dashboard noise.
           </p>
+
+          <div className="hero-ledger">
+            <div className="hero-ledger-row">
+              <span className="hero-ledger-label">Instrument</span>
+              <span className="hero-ledger-value">Git repository history</span>
+            </div>
+            <div className="hero-ledger-row">
+              <span className="hero-ledger-label">Price model</span>
+              <span className="hero-ledger-value">codebase LOC as close</span>
+            </div>
+            <div className="hero-ledger-row">
+              <span className="hero-ledger-label">Tape</span>
+              <span className="hero-ledger-value">5M, 1H, 1D, 1W, 1M</span>
+            </div>
+          </div>
 
           <div className="terminal-callout" aria-label="repository input preview">
             <span className="prompt">$</span>
@@ -538,28 +554,28 @@ function LandingPage() {
 
           <div className="hero-actions">
             <a className="primary-link" href="/analyze">
-              Open analysis page
+              Launch analysis terminal
             </a>
             <p className="action-note">
-              Jump straight into a real local Git repository.
+              Feed in a real repository and read it like a market.
             </p>
           </div>
 
           <div className="hero-note">
-            <strong>Core principle:</strong> the page should explain itself
-            before the user touches anything.
+            <strong>Core principle:</strong> no setup maze, no tutorial debt,
+            just the tape and the story inside it.
           </div>
         </div>
 
         <div className="chart-panel">
           <div className="chart-header">
             <div>
-              <p className="panel-label">REPOSITORY CANDLE TAPE</p>
-              <h2>Daily code movement</h2>
+              <p className="panel-label">LIVE PREVIEW / CODE TAPE</p>
+              <h2>Repository movement, rendered like a terminal chart</h2>
             </div>
             <div className="panel-stats">
               <span>LOC CLOSE 151K</span>
-              <span className="positive">+27.1%</span>
+              <span className="positive">+27.1% TREND</span>
             </div>
           </div>
 
@@ -578,22 +594,22 @@ function LandingPage() {
 
       <section className="story-grid">
         <div className="story-block">
-          <p className="panel-label">WHY IT CLICKS</p>
-          <h3>One chart tells the story faster than a commit list ever can.</h3>
+          <p className="panel-label">WHY IT READS FAST</p>
+          <h3>The shape of the chart tells you what kind of engineering season you are looking at.</h3>
           <p>
-            Green candles mean the codebase expanded. Red candles mean it was
-            reduced or rewritten. Long wicks show intraday volatility across
-            commits. Volume bars show how much work actually moved.
+            Green sessions show expansion. Red sessions show pruning or rewrite.
+            Long wicks mean instability inside the interval. Volume reveals
+            whether the repo drifted quietly or moved with force.
           </p>
         </div>
 
         <div className="story-block">
-          <p className="panel-label">WHAT THE USER DOES</p>
-          <h3>Almost nothing.</h3>
+          <p className="panel-label">WHAT THE USER SEES</p>
+          <h3>A codebase stops feeling abstract the moment its history gets a market form.</h3>
           <p>
-            Point the tool at a local repository, let it parse Git history, and
-            the explanation is already on screen. This first version is designed
-            to be legible before it becomes interactive.
+            You point at a repository, choose the branch, choose the interval,
+            and the screen does the rest. The interface is built to explain
+            itself before anyone starts exploring.
           </p>
         </div>
       </section>
