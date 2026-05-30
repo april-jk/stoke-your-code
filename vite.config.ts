@@ -30,6 +30,8 @@ type AnalyzePayload = {
 }
 
 type BranchListPayload = {
+  repoPath?: string
+  source?: 'local' | 'github'
   repoUrl?: string
 }
 
@@ -165,6 +167,41 @@ async function listGitHubBranches(repoUrl: string) {
   }
 }
 
+async function listLocalBranches(repoPath: string) {
+  const absolutePath = ensureGitRepository(repoPath)
+  const branchOutput = await runGit(
+    ['for-each-ref', '--format=%(refname:short)', 'refs/heads'],
+    {
+      cwd: absolutePath,
+    },
+  )
+  const currentBranch = (await runGit(['rev-parse', '--abbrev-ref', 'HEAD'], {
+    cwd: absolutePath,
+  })).trim()
+
+  const branches = branchOutput
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+
+  const sortedBranches = Array.from(new Set(branches)).sort((left, right) => {
+    if (left === currentBranch) {
+      return -1
+    }
+
+    if (right === currentBranch) {
+      return 1
+    }
+
+    return left.localeCompare(right)
+  })
+
+  return {
+    defaultBranch: currentBranch === 'HEAD' ? '' : currentBranch,
+    branches: sortedBranches,
+  }
+}
+
 async function ensureGitHubRepository(
   repoUrl: string,
   branch: string | undefined,
@@ -214,6 +251,7 @@ async function ensureGitHubRepository(
   }
 
   return {
+    branch: requestedBranch,
     repoPath: repoDir,
     displayName: `${owner}/${repo}`,
     source: 'github' as const,
@@ -234,21 +272,25 @@ function ensureGitRepository(repoPath: string) {
   return absolutePath
 }
 
-async function getGitRows(repoPath: string) {
-  const output = await runGit(
-    [
-      'log',
-      '--all',
-      '--reverse',
-      '--date=short',
-      '--pretty=format:__COMMIT__%x09%cs%x09%an',
-      '--numstat',
-      '--no-renames',
-    ],
-    {
-      cwd: repoPath,
-    },
-  )
+async function getGitRows(repoPath: string, branch?: string) {
+  const args = [
+    'log',
+    '--reverse',
+    '--date=short',
+    '--pretty=format:__COMMIT__%x09%cs%x09%an',
+    '--numstat',
+    '--no-renames',
+  ]
+
+  if (branch?.trim()) {
+    args.push(branch.trim())
+  } else {
+    args.splice(1, 0, '--all')
+  }
+
+  const output = await runGit(args, {
+    cwd: repoPath,
+  })
 
   const lines = output.split('\n')
   const rows: GitCommitRow[] = []
@@ -358,7 +400,7 @@ export default defineConfig({
     {
       name: 'local-git-analysis-api',
       configureServer(server) {
-        server.middlewares.use('/api/github-branches', async (request, response) => {
+        server.middlewares.use('/api/repo-branches', async (request, response) => {
           if (request.method !== 'POST') {
             sendJson(response, 405, { error: 'Method not allowed.' })
             return
@@ -367,16 +409,11 @@ export default defineConfig({
           try {
             const rawBody = await readBody(request)
             const payload = JSON.parse(rawBody) as BranchListPayload
-            const repoUrl = payload.repoUrl?.trim()
-
-            if (!repoUrl) {
-              sendJson(response, 400, {
-                error: 'Please provide a GitHub repository URL.',
-              })
-              return
-            }
-
-            const branchData = await listGitHubBranches(repoUrl)
+            const source = payload.source ?? 'local'
+            const branchData =
+              source === 'github'
+                ? await listGitHubBranches(payload.repoUrl?.trim() ?? '')
+                : await listLocalBranches(payload.repoPath?.trim() ?? '')
 
             sendJson(response, 200, branchData)
           } catch (error) {
@@ -384,7 +421,7 @@ export default defineConfig({
               error:
                 error instanceof Error
                   ? error.message
-                  : 'Failed to load GitHub branches.',
+                  : 'Failed to load repository branches.',
             })
           }
         })
@@ -402,6 +439,7 @@ export default defineConfig({
             const stages: AnalyzeStage[] = []
 
             let absolutePath = ''
+            let selectedBranch = payload.branch?.trim() ?? ''
             let displayName = ''
 
             if (source === 'github') {
@@ -421,6 +459,7 @@ export default defineConfig({
                 (stage) => stages.push(stage),
               )
               absolutePath = remoteRepo.repoPath
+              selectedBranch = remoteRepo.branch ?? selectedBranch
               displayName = remoteRepo.displayName
             } else {
               stages.push('validating-local')
@@ -438,7 +477,7 @@ export default defineConfig({
             }
 
             stages.push('analyzing-history')
-            const rows = await getGitRows(absolutePath)
+            const rows = await getGitRows(absolutePath, selectedBranch)
 
             if (rows.length === 0) {
               sendJson(response, 400, {
