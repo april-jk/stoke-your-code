@@ -45,6 +45,11 @@ type AnalysisError = {
   error?: string
 }
 
+type GitHubBranchesResponse = {
+  defaultBranch: string
+  branches: string[]
+}
+
 type HoverSnapshot = {
   day: string
   open: number
@@ -504,6 +509,10 @@ function AnalysisPage() {
   const [repoPath, setRepoPath] = useState('/Users/watson/codingProj/stoke-your-code')
   const [repoUrl, setRepoUrl] = useState('https://github.com/openai/openai-node')
   const [branch, setBranch] = useState('')
+  const [availableBranches, setAvailableBranches] = useState<string[]>([])
+  const [defaultBranch, setDefaultBranch] = useState('')
+  const [branchesLoading, setBranchesLoading] = useState(false)
+  const [branchesError, setBranchesError] = useState('')
   const [data, setData] = useState<AnalysisResponse | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -511,6 +520,7 @@ function AnalysisPage() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [statusMessage, setStatusMessage] = useState('')
   const [statusKind, setStatusKind] = useState<'idle' | 'loading' | 'success'>('idle')
+  const trimmedRepoUrl = repoUrl.trim()
 
   const latestCandle = data?.candles.at(-1) ?? null
   const trend =
@@ -551,6 +561,77 @@ function AnalysisPage() {
     infoCandle && infoCandle.open !== 0
       ? (infoDelta! / Math.abs(infoCandle.open)) * 100
       : null
+
+  useEffect(() => {
+    if (sourceMode !== 'github') {
+      return
+    }
+
+    const controller = new AbortController()
+    const timeoutId = window.setTimeout(() => {
+      void (async () => {
+        setBranchesLoading(true)
+        setBranchesError('')
+
+        try {
+          const response = await fetch('/api/github-branches', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              repoUrl: trimmedRepoUrl,
+            }),
+            signal: controller.signal,
+          })
+
+          const payload = (await response.json()) as GitHubBranchesResponse | AnalysisError
+
+          if (!response.ok) {
+            throw new Error(
+              'error' in payload
+                ? payload.error ?? 'Failed to load GitHub branches'
+                : 'Failed to load GitHub branches',
+            )
+          }
+
+          const nextDefaultBranch = (payload as GitHubBranchesResponse).defaultBranch
+          const nextBranches = (payload as GitHubBranchesResponse).branches
+          setAvailableBranches(nextBranches)
+          setDefaultBranch(nextDefaultBranch)
+          setBranch((currentBranch) => {
+            if (!currentBranch) {
+              return ''
+            }
+
+            return nextBranches.includes(currentBranch) ? currentBranch : ''
+          })
+        } catch (branchError) {
+          if (controller.signal.aborted) {
+            return
+          }
+
+          setAvailableBranches([])
+          setDefaultBranch('')
+          setBranch('')
+          setBranchesError(
+            branchError instanceof Error
+              ? branchError.message
+              : 'Failed to load GitHub branches',
+          )
+        } finally {
+          if (!controller.signal.aborted) {
+            setBranchesLoading(false)
+          }
+        }
+      })()
+    }, 350)
+
+    return () => {
+      controller.abort()
+      window.clearTimeout(timeoutId)
+    }
+  }, [sourceMode, trimmedRepoUrl])
 
   useEffect(() => {
     void (async () => {
@@ -654,6 +735,7 @@ function AnalysisPage() {
     setError('')
     setStatusMessage('')
     setStatusKind('idle')
+    setBranchesError('')
   }
 
   return (
@@ -713,22 +795,49 @@ function AnalysisPage() {
                   className="repo-input"
                   type="text"
                   value={repoUrl}
-                  onChange={(event) => setRepoUrl(event.target.value)}
+                  onChange={(event) => {
+                    const nextRepoUrl = event.target.value
+                    setRepoUrl(nextRepoUrl)
+
+                    if (!nextRepoUrl.trim()) {
+                      setAvailableBranches([])
+                      setDefaultBranch('')
+                      setBranch('')
+                      setBranchesError('')
+                      setBranchesLoading(false)
+                    }
+                  }}
                   placeholder="https://github.com/owner/repo"
                   spellCheck={false}
                 />
                 <label className="repo-label" htmlFor="repo-branch">
                   Branch, optional
                 </label>
-                <input
+                <select
                   id="repo-branch"
                   className="repo-input"
-                  type="text"
                   value={branch}
                   onChange={(event) => setBranch(event.target.value)}
-                  placeholder="Leave empty for the default branch"
-                  spellCheck={false}
-                />
+                  disabled={!trimmedRepoUrl || branchesLoading || availableBranches.length === 0}
+                >
+                  <option value="">
+                    {!trimmedRepoUrl
+                      ? 'Enter a GitHub URL first'
+                      : branchesLoading
+                      ? 'Loading branches...'
+                      : defaultBranch
+                        ? `Default branch (${defaultBranch})`
+                        : 'Default branch'}
+                  </option>
+                  {availableBranches.map((branchName) => (
+                    <option key={branchName} value={branchName}>
+                      {branchName}
+                    </option>
+                  ))}
+                </select>
+                {branchesError ? (
+                  <p className="repo-hint repo-hint-error">{branchesError}</p>
+                ) : null}
               </>
             ) : (
               <>

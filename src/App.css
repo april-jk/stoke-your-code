@@ -517,6 +517,10 @@
   font-size: 0.75rem;
 }
 
+.repo-hint-error {
+  color: #ffb4b0;
+}
+
 .back-link {
   color: var(--text);
   text-decoration: none;
@@ -530,6 +534,24 @@
   border: 1px solid rgba(161, 177, 192, 0.2);
   background: rgba(7, 11, 15, 0.8);
   color: var(--text);
+}
+
+select.repo-input {
+  appearance: none;
+  background-image:
+    linear-gradient(45deg, transparent 50%, rgba(191, 233, 207, 0.78) 50%),
+    linear-gradient(135deg, rgba(191, 233, 207, 0.78) 50%, transparent 50%);
+  background-position:
+    calc(100% - 1rem) calc(50% - 0.14rem),
+    calc(100% - 0.68rem) calc(50% - 0.14rem);
+  background-size: 0.34rem 0.34rem, 0.34rem 0.34rem;
+  background-repeat: no-repeat;
+  padding-right: 2rem;
+}
+
+select.repo-input:disabled {
+  opacity: 0.72;
+  cursor: progress;
 }
 
 .repo-input:focus {

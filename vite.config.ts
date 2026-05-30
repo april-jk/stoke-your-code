@@ -29,6 +29,10 @@ type AnalyzePayload = {
   branch?: string
 }
 
+type BranchListPayload = {
+  repoUrl?: string
+}
+
 type AnalyzeStage =
   | 'validating-local'
   | 'validating-github'
@@ -116,6 +120,49 @@ function ensureRemoteCacheDir() {
   const cacheDir = path.resolve('.cache/remote-repos')
   fs.mkdirSync(cacheDir, { recursive: true })
   return cacheDir
+}
+
+async function listGitHubBranches(repoUrl: string) {
+  const { cloneUrl } = parseGitHubUrl(repoUrl)
+  const output = await runGit(['ls-remote', '--symref', '--heads', cloneUrl])
+  const branches = new Set<string>()
+  let defaultBranch = ''
+
+  for (const line of output.split('\n')) {
+    if (!line.trim()) {
+      continue
+    }
+
+    if (line.startsWith('ref: ')) {
+      const match = line.match(/^ref:\s+refs\/heads\/(.+?)\s+HEAD$/)
+      if (match?.[1]) {
+        defaultBranch = match[1]
+      }
+      continue
+    }
+
+    const match = line.match(/\s+refs\/heads\/(.+)$/)
+    if (match?.[1]) {
+      branches.add(match[1])
+    }
+  }
+
+  const sortedBranches = Array.from(branches).sort((left, right) => {
+    if (left === defaultBranch) {
+      return -1
+    }
+
+    if (right === defaultBranch) {
+      return 1
+    }
+
+    return left.localeCompare(right)
+  })
+
+  return {
+    defaultBranch,
+    branches: sortedBranches,
+  }
 }
 
 async function ensureGitHubRepository(
@@ -311,6 +358,37 @@ export default defineConfig({
     {
       name: 'local-git-analysis-api',
       configureServer(server) {
+        server.middlewares.use('/api/github-branches', async (request, response) => {
+          if (request.method !== 'POST') {
+            sendJson(response, 405, { error: 'Method not allowed.' })
+            return
+          }
+
+          try {
+            const rawBody = await readBody(request)
+            const payload = JSON.parse(rawBody) as BranchListPayload
+            const repoUrl = payload.repoUrl?.trim()
+
+            if (!repoUrl) {
+              sendJson(response, 400, {
+                error: 'Please provide a GitHub repository URL.',
+              })
+              return
+            }
+
+            const branchData = await listGitHubBranches(repoUrl)
+
+            sendJson(response, 200, branchData)
+          } catch (error) {
+            sendJson(response, 400, {
+              error:
+                error instanceof Error
+                  ? error.message
+                  : 'Failed to load GitHub branches.',
+            })
+          }
+        })
+
         server.middlewares.use('/api/analyze', async (request, response) => {
           if (request.method !== 'POST') {
             sendJson(response, 405, { error: 'Method not allowed.' })
