@@ -16,11 +16,11 @@ Stoke Your Code 是一个偏交易终端风格的 Git 历史可视化工具。�
 
 ### 落地页
 
-![落地页预览](./docs/screenshots/landing-page.png)
+![落地页预览](./docs-src/screenshots/landing-page.png)
 
 ### 分析页
 
-![分析页预览](./docs/screenshots/analysis-page.png)
+![分析页预览](./docs-src/screenshots/analysis-page.png)
 
 ## 这个项目在做什么
 
@@ -69,6 +69,12 @@ npm run dev
 - 分析页会以 demo 模式展示示例仓库数据
 - 真正的本地 Git 分析和实时 GitHub clone/fetch 分析仍然需要本地 dev server 或后端运行时支持
 
+如果要从仓库内刷新公开 Pages 静态站：
+
+```bash
+npm run build:pages
+```
+
 ## 常用脚本
 
 ```bash
@@ -99,7 +105,7 @@ npm run preview
 - 中文说明：`README.zh-CN.md`
 - 产品上下文：[`PRODUCT.md`](./PRODUCT.md)
 - 设计上下文：[`DESIGN.md`](./DESIGN.md)
-- 最初想法记录：[`docs/idea.md`](./docs/idea.md)
+- 最初想法记录：[`docs-src/idea.md`](./docs-src/idea.md)
 
 ## 当前状态
 

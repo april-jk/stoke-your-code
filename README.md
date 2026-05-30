@@ -16,11 +16,11 @@ The project supports:
 
 ### Landing page
 
-![Landing page preview](./docs/screenshots/landing-page.png)
+![Landing page preview](./docs-src/screenshots/landing-page.png)
 
 ### Analysis terminal
 
-![Analysis page preview](./docs/screenshots/analysis-page.png)
+![Analysis page preview](./docs-src/screenshots/analysis-page.png)
 
 ## What It Does
 
@@ -68,6 +68,12 @@ The public Pages site is a static presentation build:
 - Analysis page opens in demo mode with sample repository data
 - Real local Git analysis and live GitHub clone/fetch analysis still require the local dev server or a backend runtime
 
+To refresh the public Pages build from the repository itself:
+
+```bash
+npm run build:pages
+```
+
 ## Scripts
 
 ```bash
@@ -98,7 +104,7 @@ npm run preview
 - Chinese: [`README.zh-CN.md`](./README.zh-CN.md)
 - Product context: [`PRODUCT.md`](./PRODUCT.md)
 - Design context: [`DESIGN.md`](./DESIGN.md)
-- Early idea notes: [`docs/idea.md`](./docs/idea.md)
+- Early idea notes: [`docs-src/idea.md`](./docs-src/idea.md)
 
 ## Status
 
